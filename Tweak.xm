@@ -18,7 +18,6 @@ static void *const BMOverlayBoltImageViewKey = (void *)&BMOverlayBoltImageViewKe
 static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMManagedBatteryViewActiveKey = (void *)&BMManagedBatteryViewActiveKey;
-static NSString *const BMLogPath = @"/var/mobile/Documents/BatteryMirror-log.txt";
 static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 
 @interface _UIBatteryView : UIView
@@ -48,10 +47,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 @property (nonatomic, assign) BOOL allowsGroupOpacity;
 @property (nonatomic, assign) BOOL allowsGroupBlending;
 @end
-
-static void BMWriteLogLine(NSString *line) {
-	(void)line;
-}
 
 static BOOL BMBatteryPercentageEnabled(void) {
 	CFPropertyListRef value = CFPreferencesCopyValue(CFSTR("SBShowBatteryPercentage"), BMSpringBoardPreferencesDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
@@ -329,22 +324,6 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor, B
 	overlayLabel.layer.compositingFilter = useCutoutText ? kCAFilterDestOut : nil;
 }
 
-static NSString *BMColorDescription(UIColor *color) {
-	if (!color) {
-		return @"(null)";
-	}
-
-	CGFloat red = 0.0;
-	CGFloat green = 0.0;
-	CGFloat blue = 0.0;
-	CGFloat alpha = 0.0;
-	if ([color getRed:&red green:&green blue:&blue alpha:&alpha]) {
-		return [NSString stringWithFormat:@"rgba(%.3f, %.3f, %.3f, %.3f)", red, green, blue, alpha];
-	}
-
-	return color.description;
-}
-
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
 	if (!view || !block) {
 		return;
@@ -354,9 +333,6 @@ static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
 	for (UIView *subview in view.subviews) {
 		BMEnumerateSubviews(subview, block);
 	}
-}
-
-static void BMLogBatteryMethodSurveyIfNeeded(void) {
 }
 
 static void BMSetStockLowPowerArtworkHidden(UIViewController *controller, BOOL hidden) {
@@ -390,7 +366,6 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 
 	Class batteryViewClass = objc_getClass("_UIBatteryView");
 	if (!batteryViewClass || ![batteryViewClass instancesRespondToSelector:@selector(initWithSizeCategory:)]) {
-		BMWriteLogLine(@"Unable to create _UIBatteryView; class or selector missing");
 		return nil;
 	}
 
@@ -399,7 +374,6 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	[controller.view addSubview:batteryView];
 	BMSetBatteryViewForController(controller, batteryView);
 	BMSetManagedBatteryView(batteryView, YES);
-	BMWriteLogLine([NSString stringWithFormat:@"Created _UIBatteryView for controller=%@", NSStringFromClass(controller.class)]);
 
 	return batteryView;
 }
@@ -612,7 +586,6 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller) {
-	BMLogBatteryMethodSurveyIfNeeded();
 	if (!BMPrefsEnabled()) {
 		BMShowStockLowPowerArtwork(controller);
 		BMSetManagedBatteryVisibility(BMBatteryViewForController(controller), NO);
@@ -644,17 +617,6 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 		BMApplyBatteryStyling(batteryView);
 	}
 	BMLayoutBatteryView(controller);
-	BMWriteLogLine([NSString stringWithFormat:@"Refreshed low power tile controller=%@ batteryFrame=%@ pref=%@ level=%.3f charging=%ld active=%@ fill=%@ text=%@ body=%@ pin=%@",
-		NSStringFromClass(controller.class),
-		NSStringFromCGRect(batteryView.frame),
-		showsPercentage ? @"on" : @"off",
-		batteryLevel,
-		(long)chargingState,
-		active ? @"yes" : @"no",
-		BMColorDescription([batteryView _batteryFillColor]),
-		BMColorDescription([batteryView _batteryTextColor]),
-		[batteryView respondsToSelector:@selector(bodyColor)] ? BMColorDescription([batteryView bodyColor]) : @"(n/a)",
-		[batteryView respondsToSelector:@selector(pinColor)] ? BMColorDescription([batteryView pinColor]) : @"(n/a)"]);
 }
 
 static BOOL BMIsLowPowerModuleController(UIViewController *controller) {
@@ -685,9 +647,6 @@ static void BMRefreshTrackedControllers(NSString *reason) {
 			continue;
 		}
 
-		BMWriteLogLine([NSString stringWithFormat:@"Refreshing tracked controller=%@ reason=%@",
-			NSStringFromClass(controller.class),
-			reason ?: @"(unknown)"]);
 		BMRefreshLowPowerLabel(controller);
 	}
 }
@@ -698,10 +657,6 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	}
 
 	BMTrackController(controller);
-	BMWriteLogLine([NSString stringWithFormat:@"%@ %@ bounds=%@",
-		NSStringFromClass(controller.class),
-		eventName,
-		NSStringFromCGRect(controller.view.bounds)]);
 	BMRefreshLowPowerLabel(controller);
 }
 
@@ -810,7 +765,6 @@ static void BMPrefsDidChangeCallback(__unused CFNotificationCenterRef center, __
 
 %ctor {
 	@autoreleasepool {
-		[@"" writeToFile:BMLogPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
 		[UIDevice currentDevice].batteryMonitoringEnabled = YES;
 		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
 			NULL,
@@ -820,6 +774,5 @@ static void BMPrefsDidChangeCallback(__unused CFNotificationCenterRef center, __
 			CFNotificationSuspensionBehaviorDeliverImmediately);
 		__unused static BMBatteryMirrorObserver *observer = nil;
 		observer = [[BMBatteryMirrorObserver alloc] init];
-		BMWriteLogLine(@"BatteryMirror loaded");
 	}
 }
