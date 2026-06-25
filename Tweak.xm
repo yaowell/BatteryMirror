@@ -192,7 +192,7 @@ static UIColor *BMManagedBatteryViewFillColor(_UIBatteryView *batteryView) {
 		return [UIColor colorWithRed:0.96 green:0.82 blue:0.20 alpha:1.0];
 	}
 	if (BMManagedBatteryViewIsCharging()) {
-		return [UIColor colorWithRed:0.30 green:0.88 blue:0.44 alpha:1.0];
+		return [UIColor colorWithRed:53.0/255.0 green:199.0/255.0 blue:86.0/255.0 alpha:1.0];
 	}
 	if (BMManagedBatteryViewIsLowLevel()) {
 		return [UIColor colorWithRed:0.88 green:0.23 blue:0.19 alpha:1.0];
