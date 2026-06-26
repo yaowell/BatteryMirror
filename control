@@ -4,7 +4,7 @@ SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batt
 Name: BatteryMirror
 Version: 0.0.3
 Architecture: iphoneos-arm64
-Description: Mirror the status bar battery onto the Low Power Mode CC toggle.
+Description: Mirrors the statusbar battery on the Low Power Mode toggle in Control Center.
 Maintainer: futur3sn0w
 Author: futur3sn0w
 Section: Tweaks
