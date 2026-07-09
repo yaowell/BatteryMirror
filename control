@@ -2,7 +2,7 @@ Package: com.futur3sn0w.batterymirror
 Icon: https://futur3sn0w.github.io/repo/icons/com.futur3sn0w.batterymirror.png
 SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batterymirror.json
 Name: BatteryMirror
-Version: 0.0.3
+Version: 0.0.4
 Architecture: iphoneos-arm64
 Description: Mirrors the statusbar battery on the Low Power Mode toggle in Control Center.
 Maintainer: futur3sn0w

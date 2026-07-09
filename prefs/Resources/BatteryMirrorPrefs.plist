@@ -3,6 +3,7 @@
 		bundle = BatteryMirrorPrefs;
 		cell = PSLinkCell;
 		detail = BMPRootListController;
+		icon = "icon.png";
 		isController = 1;
 		label = BatteryMirror;
 	};
