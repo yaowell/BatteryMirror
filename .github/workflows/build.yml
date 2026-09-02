@@ -23,7 +23,7 @@ jobs:
         run: |
           git clone --recursive https://github.com/roothide/theos.git $HOME/theos
           rm -rf $HOME/theos/sdks
-          git clone --depth=1 https://github.com/theos/sdks.git $HOME/theos/sdks
+          git clone --depth=1 https://github.com/roothide/sdks.git $HOME/theos/sdks
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
       - name: Build Package
