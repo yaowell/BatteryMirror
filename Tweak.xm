@@ -229,10 +229,7 @@ static UIColor *BMManagedBatteryViewInactiveColor(_UIBatteryView *batteryView) {
 }
 
 static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, UILabel *label) {
-	if (!BMBatteryPercentageEnabled()) {
-		return label.text;
-	}
-
+	// 强制忽略系统百分比开关，始终生成百分比数字以保证渲染胶囊样式
 	float level = [UIDevice currentDevice].batteryLevel;
 	NSInteger percent = level < 0.0f ? 0 : (NSInteger)lroundf(level * 100.0f);
 	return [NSString stringWithFormat:@"%ld", (long)percent];
@@ -595,7 +592,7 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 	BMHideStockLowPowerArtwork(controller);
 
 	_UIBatteryView *batteryView = BMEnsureBatteryView(controller);
-	BOOL showsPercentage = BMBatteryPercentageEnabled();
+	BOOL showsPercentage = YES; // 强制开启百分比模式
 	UIDevice *device = [UIDevice currentDevice];
 	device.batteryMonitoringEnabled = YES;
 	float batteryLevel = device.batteryLevel;
