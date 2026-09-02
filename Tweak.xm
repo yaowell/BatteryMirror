@@ -8,7 +8,6 @@
 
 extern NSString *const kCAFilterDestOut;
 
-static CFStringRef const BMSpringBoardPreferencesDomain = CFSTR("com.apple.springboard");
 static CFStringRef const BMPrefsDomain = CFSTR("com.futur3sn0w.batterymirror.preferences");
 static CFStringRef const BMPrefsReloadNotification = CFSTR("com.futur3sn0w.batterymirror/ReloadPrefs");
 static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
