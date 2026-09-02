@@ -158,11 +158,6 @@ static void BMSetManagedBatteryViewActive(_UIBatteryView *batteryView, BOOL acti
 	objc_setAssociatedObject(batteryView, BMManagedBatteryViewActiveKey, @(active), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-// 忽略充电检测，始终返回 NO
-static BOOL BMManagedBatteryViewIsCharging(void) {
-	return NO;
-}
-
 static BOOL BMManagedBatteryViewIsInLowPowerMode(void) {
 	return [NSProcessInfo processInfo].lowPowerModeEnabled;
 }
@@ -447,7 +442,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				overlayLabel.alpha = 1.0;
 				overlayLabel.transform = CGAffineTransformIdentity;
 				
-				// 彻底隐藏任何闪电图标
 				overlayBoltImageView.hidden = YES;
 				overlayBoltImageView.alpha = 0.0;
 				overlayBoltImageView.transform = CGAffineTransformIdentity;
@@ -498,7 +492,6 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 	device.batteryMonitoringEnabled = YES;
 	float batteryLevel = device.batteryLevel;
 	
-	// 强制传入普通未充电状态 (0)
 	NSInteger chargingState = 0; 
 	BOOL active = BMControllerModuleIsActive(controller);
 	if (batteryView) {
