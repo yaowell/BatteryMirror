@@ -1,4 +1,4 @@
-name: Build Roothide Deb
+name: Build Dual Debs (Roothide & Rootless)
 
 on:
   push:
@@ -28,19 +28,22 @@ jobs:
 
       - name: Fix Private Frameworks
         run: |
-          # 自动寻找到 iOS SDK 中的 PrivateFrameworks 补全到 Theos SDK 目录
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           if [ -d "$SDK_PATH/System/Library/PrivateFrameworks/Preferences.framework" ]; then
             mkdir -p $HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
             cp -R "$SDK_PATH/System/Library/PrivateFrameworks/Preferences.framework" $HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/ || true
           fi
 
-      - name: Build Package
+      - name: Build Roothide Package
         run: |
-          make clean package THEOS_PACKAGE_SCHEME=roothide SYSROOT=$HOME/theos/sdks/iPhoneOS16.5.sdk
+          make clean package THEOS_PACKAGE_SCHEME=roothide SYSROOT=$HOME/theos/sdks/iPhoneOS16.5.sdk FINALPACKAGE=1
+
+      - name: Build Rootless Package
+        run: |
+          make clean package THEOS_PACKAGE_SCHEME=rootless SYSROOT=$HOME/theos/sdks/iPhoneOS16.5.sdk FINALPACKAGE=1
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BatteryMirror-Roothide-Deb
+          name: BatteryMirror-1.0-Debs
           path: packages/*.deb
