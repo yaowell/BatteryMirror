@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Dependencies
+        run: |
+          brew install ldid
+
       - name: Clone Roothide Theos and SDKs
         run: |
           git clone --recursive https://github.com/roothide/theos.git $HOME/theos
