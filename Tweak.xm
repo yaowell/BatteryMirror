@@ -255,7 +255,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGRect bounds = controller.view.bounds;
 	CGFloat viewWidth = CGRectGetWidth(bounds);
 	CGFloat viewHeight = CGRectGetHeight(bounds);
-	
+
 	if (viewWidth <= 0 || viewHeight <= 0) return;
 
 	CGFloat width = 31.0;
@@ -263,8 +263,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
 	CGFloat baseScale = 1.25;
-	
-	// 针对 Pro Max / Plus (screenWidth >= 420) 优化放缩比例为 1.42，避免失真溢出
+
 	if (screenWidth >= 420.0) {
 		baseScale = 1.42;
 	} else if (screenWidth < 380.0) {
@@ -272,7 +271,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGFloat x = floor((viewWidth - width) * 0.5);
-	
+
 	BOOL isExpandedMenu = viewHeight > 120.0;
 	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
@@ -340,7 +339,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
 	UIColor *pinColor = bodyColor;
 
-	// 防止电池主体和右侧正极 Pin 被图层裁剪截断
 	batteryView.clipsToBounds = NO;
 	batteryView.layer.masksToBounds = NO;
 
@@ -368,7 +366,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if ([batteryView respondsToSelector:@selector(setPinColorAlpha:)]) {
 		[batteryView setPinColorAlpha:1.0];
 	}
-	
+
 	for (CALayer *sublayer in batteryView.layer.sublayers) {
 		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
 	}
@@ -382,6 +380,12 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 
+			// 获取并锁定系统原生 Label 的初始 Frame 基准
+			if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
+				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:label.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+			}
+			CGRect containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
+
 			UIImageView *boltImageView = BMEnsureBoltImageView(batteryView);
 			label.hidden = YES;
 			label.alpha = 0.0;
@@ -393,17 +397,16 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 				BOOL useCutoutText = BMManagedBatteryViewUsesCutoutText(batteryView);
 
-				// 针对两位数和三位数（100%）动态匹配绝不溢出的字号
-				UIFont *font = [UIFont boldSystemFontOfSize:10.0];
-				if (displayText.length >= 3) {
-					font = [UIFont boldSystemFontOfSize:8.5];
-				}
+				UIFont *font = [UIFont boldSystemFontOfSize:(displayText.length >= 3 ? 8.0 : 9.5)];
 
 				BMConfigureOverlayLabel(overlayLabel, textColor, useCutoutText);
 				overlayLabel.font = font;
 
-				// 准确对齐电池框内部居中区域
-				overlayLabel.frame = CGRectMake(-1.0, 0.0, 30.0, 16.0);
+				// 基于 containerFrame 动态居中算，并修正 1px 消除偏心
+				CGFloat overlayWidth = CGRectGetWidth(containerFrame) + 2.0;
+				CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5) - 1.0;
+
+				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
 					NSFontAttributeName: font
@@ -411,7 +414,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				overlayLabel.hidden = NO;
 				overlayLabel.alpha = 1.0;
 				overlayLabel.transform = CGAffineTransformIdentity;
-				
+
 				overlayBoltImageView.hidden = YES;
 				overlayBoltImageView.alpha = 0.0;
 				overlayBoltImageView.transform = CGAffineTransformIdentity;
@@ -454,8 +457,8 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 	UIDevice *device = [UIDevice currentDevice];
 	device.batteryMonitoringEnabled = YES;
 	float batteryLevel = device.batteryLevel;
-	
-	NSInteger chargingState = 0; 
+
+	NSInteger chargingState = 0;
 	BOOL active = BMControllerModuleIsActive(controller);
 	if (batteryView) {
 		BMSetManagedBatteryVisibility(batteryView, YES);
