@@ -278,16 +278,18 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
+	CGFloat viewHeight = CGRectGetHeight(bounds);
 	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
 	CGFloat height = 16.0;
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	
-	/* 
-	   修改说明：
-	   1. 高度提升：原先是 0.505，现改为 0.45（值越小越靠上），可将二级菜单及模块内的图标向上提升。
-	   2. 图标变大：原先 scale 是 1.18，现调整为 1.30（根据需求可调整为 1.25 - 1.35 之间）。
-	*/
-	CGFloat y = floor(CGRectGetHeight(bounds) * 0.45 - height * 0.5);
+	// 判断是二级展开菜单（高度较大）还是一级快捷按钮
+	BOOL isExpandedMenu = viewHeight > 120.0;
+	
+	// 二级菜单使用 0.43 向上抬高，一级按钮使用 0.50 保持垂直居中
+	CGFloat yRatio = isExpandedMenu ? 0.43 : 0.50;
+	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
+
 	batteryView.frame = CGRectMake(x, y, width, height);
 	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
 	[controller.view bringSubviewToFront:batteryView];
@@ -348,7 +350,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *fillColor = BMManagedBatteryViewFillColor(batteryView);
 	UIColor *bodyColor = BMManagedBatteryViewBodyColor(batteryView);
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
-	UIColor *pinColor = bodyColor; // 默认显示电池外壳凸起 (Nub)
+	UIColor *pinColor = bodyColor;
 
 	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
 		[batteryView setInternalSizeCategory:1];
@@ -375,7 +377,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setPinColorAlpha:1.0];
 	}
 	
-	// 默认使用 4.0 圆角
 	for (CALayer *sublayer in batteryView.layer.sublayers) {
 		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
 	}
