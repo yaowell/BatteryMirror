@@ -199,6 +199,3 @@ static void BMRefreshLowPowerLabel(id controller) {
 }
 
 %end
-
-```
-换回这版，重新打个包刷上，绝对就能正常运行了！理论上的“防重”有时反而会破坏控制中心原本的复用机制，还是原生调用顺序最稳。
