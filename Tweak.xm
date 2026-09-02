@@ -279,19 +279,22 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	CGRect bounds = controller.view.bounds;
 	CGFloat viewHeight = CGRectGetHeight(bounds);
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
-	CGFloat height = 16.0;
+	
+	/* 1. 修改图标原始矢量尺寸（原系统默认是 width 31.0, height 16.0） */
+	CGFloat width = 38.0;   // 基础宽度：调大即拉宽图标
+	CGFloat height = 20.0;  // 基础高度：调大即增高图标
+
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	
 	// 判断是二级展开菜单（高度较大）还是一级快捷按钮
 	BOOL isExpandedMenu = viewHeight > 120.0;
 	
-	// 二级菜单使用 0.43 向上抬高，一级按钮使用 0.50 保持垂直居中
-	CGFloat yRatio = isExpandedMenu ? 0.43 : 0.50;
+	/* 2. 修改二级菜单垂直位置 */
+	CGFloat yRatio = isExpandedMenu ? 0.43 : 0.50; // 0.43 对应二级菜单（越小越靠上），0.50 对应一级按钮
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
+	batteryView.transform = CGAffineTransformIdentity; // 使用 1:1 矢量渲染，不进行 scale 缩放
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -303,7 +306,7 @@ static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
 	CGRect bounds = layer.bounds;
 	CGFloat width = CGRectGetWidth(bounds);
 	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
+	return width >= 5.0 && width <= 50.0 && height >= 5.0 && height <= 30.0;
 }
 
 static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
@@ -378,7 +381,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	}
 	
 	for (CALayer *sublayer in batteryView.layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
+		BMApplyCornerRadiusToLayerTree(sublayer, 5.0);
 	}
 
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
