@@ -15,15 +15,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Theos
-        uses: theos/setup-theos-action@v1
-        with:
-          theos-src: theos/theos
-          theos-ref: master
-
-      - name: Download iOS SDK
+      - name: Clone Theos and SDKs
         run: |
-          git clone --depth=1 https://github.com/theos/sdks.git $THEOS/sdks
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          git clone --depth=1 https://github.com/theos/sdks.git $HOME/theos/sdks
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
       - name: Build Package
         run: |
