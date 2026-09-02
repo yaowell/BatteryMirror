@@ -8,8 +8,6 @@
 
 extern NSString *const kCAFilterDestOut;
 
-static CFStringRef const BMPrefsDomain = CFSTR("com.futur3sn0w.batterymirror.preferences");
-static CFStringRef const BMPrefsReloadNotification = CFSTR("com.futur3sn0w.batterymirror/ReloadPrefs");
 static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
 static void *const BMBoltImageViewKey = (void *)&BMBoltImageViewKey;
 static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
@@ -46,34 +44,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 @property (nonatomic, assign) BOOL allowsGroupOpacity;
 @property (nonatomic, assign) BOOL allowsGroupBlending;
 @end
-
-static id BMPrefsValue(CFStringRef key) {
-	return CFBridgingRelease(CFPreferencesCopyAppValue(key, BMPrefsDomain));
-}
-
-static BOOL BMPrefsEnabled(void) {
-	id value = BMPrefsValue(CFSTR("Enabled"));
-	if ([value respondsToSelector:@selector(boolValue)]) {
-		return [value boolValue];
-	}
-
-	return YES;
-}
-
-static CGFloat BMPrefsCornerRadius(void) {
-	id value = BMPrefsValue(CFSTR("CornerRadius"));
-	CGFloat radius = [value respondsToSelector:@selector(doubleValue)] ? (CGFloat)[value doubleValue] : 4.0;
-	return MAX(0.0, MIN(radius, 8.0));
-}
-
-static BOOL BMPrefsShowsNub(void) {
-	id value = BMPrefsValue(CFSTR("ShowsNub"));
-	if ([value respondsToSelector:@selector(boolValue)]) {
-		return [value boolValue];
-	}
-
-	return YES;
-}
 
 static _UIBatteryView *BMBatteryViewForController(UIViewController *controller) {
 	return objc_getAssociatedObject(controller, BMBatteryViewKey);
@@ -281,10 +251,6 @@ static void BMHideStockLowPowerArtwork(UIViewController *controller) {
 	BMSetStockLowPowerArtworkHidden(controller, YES);
 }
 
-static void BMShowStockLowPowerArtwork(UIViewController *controller) {
-	BMSetStockLowPowerArtworkHidden(controller, NO);
-}
-
 static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (batteryView) {
@@ -315,9 +281,15 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
 	CGFloat height = 16.0;
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
-	CGFloat y = floor(CGRectGetHeight(bounds) * 0.505 - height * 0.5);
+	
+	/* 
+	   修改说明：
+	   1. 高度提升：原先是 0.505，现改为 0.45（值越小越靠上），可将二级菜单及模块内的图标向上提升。
+	   2. 图标变大：原先 scale 是 1.18，现调整为 1.30（根据需求可调整为 1.25 - 1.35 之间）。
+	*/
+	CGFloat y = floor(CGRectGetHeight(bounds) * 0.45 - height * 0.5);
 	batteryView.frame = CGRectMake(x, y, width, height);
-	batteryView.transform = CGAffineTransformMakeScale(1.18, 1.18);
+	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -376,7 +348,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *fillColor = BMManagedBatteryViewFillColor(batteryView);
 	UIColor *bodyColor = BMManagedBatteryViewBodyColor(batteryView);
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
-	UIColor *pinColor = BMPrefsShowsNub() ? bodyColor : UIColor.clearColor;
+	UIColor *pinColor = bodyColor; // 默认显示电池外壳凸起 (Nub)
 
 	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
 		[batteryView setInternalSizeCategory:1];
@@ -400,10 +372,12 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setBodyColorAlpha:1.0];
 	}
 	if ([batteryView respondsToSelector:@selector(setPinColorAlpha:)]) {
-		[batteryView setPinColorAlpha:BMPrefsShowsNub() ? 1.0 : 0.0];
+		[batteryView setPinColorAlpha:1.0];
 	}
+	
+	// 默认使用 4.0 圆角
 	for (CALayer *sublayer in batteryView.layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, BMPrefsCornerRadius());
+		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
 	}
 
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
@@ -478,12 +452,6 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller) {
-	if (!BMPrefsEnabled()) {
-		BMShowStockLowPowerArtwork(controller);
-		BMSetManagedBatteryVisibility(BMBatteryViewForController(controller), NO);
-		return;
-	}
-
 	BMHideStockLowPowerArtwork(controller);
 
 	_UIBatteryView *batteryView = BMEnsureBatteryView(controller);
@@ -581,10 +549,6 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 
 @end
 
-static void BMPrefsDidChangeCallback(__unused CFNotificationCenterRef center, __unused void *observer, __unused CFStringRef name, __unused const void *object, __unused CFDictionaryRef userInfo) {
-	BMRefreshTrackedControllers(@"prefsChanged");
-}
-
 %hook _UIBatteryView
 
 - (void)layoutSubviews {
@@ -659,12 +623,6 @@ static void BMPrefsDidChangeCallback(__unused CFNotificationCenterRef center, __
 %ctor {
 	@autoreleasepool {
 		[UIDevice currentDevice].batteryMonitoringEnabled = YES;
-		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
-			NULL,
-			BMPrefsDidChangeCallback,
-			BMPrefsReloadNotification,
-			NULL,
-			CFNotificationSuspensionBehaviorDeliverImmediately);
 		__unused static BMBatteryMirrorObserver *observer = nil;
 		observer = [[BMBatteryMirrorObserver alloc] init];
 	}
