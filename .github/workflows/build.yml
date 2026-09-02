@@ -7,15 +7,15 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup Theos and Roothide SDK
+      - name: Setup Theos
         uses: theos/setup-theos-action@v1
         with:
           theos-src: theos/theos
@@ -30,7 +30,7 @@ jobs:
           make clean package THEOS_PACKAGE_SCHEME=roothide
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: BatteryMirror-Roothide-Deb
           path: packages/*.deb
