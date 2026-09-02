@@ -158,9 +158,9 @@ static void BMSetManagedBatteryViewActive(_UIBatteryView *batteryView, BOOL acti
 	objc_setAssociatedObject(batteryView, BMManagedBatteryViewActiveKey, @(active), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
+// 忽略充电检测，始终返回 NO
 static BOOL BMManagedBatteryViewIsCharging(void) {
-	UIDeviceBatteryState state = [UIDevice currentDevice].batteryState;
-	return state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull;
+	return NO;
 }
 
 static BOOL BMManagedBatteryViewIsInLowPowerMode(void) {
@@ -180,9 +180,6 @@ static UIColor *BMManagedBatteryViewFillColor(_UIBatteryView *batteryView) {
 	if (BMManagedBatteryViewIsInLowPowerMode()) {
 		return [UIColor colorWithRed:0.96 green:0.82 blue:0.20 alpha:1.0];
 	}
-	if (BMManagedBatteryViewIsCharging()) {
-		return [UIColor colorWithRed:53.0/255.0 green:199.0/255.0 blue:86.0/255.0 alpha:1.0];
-	}
 	if (BMManagedBatteryViewIsLowLevel()) {
 		return [UIColor colorWithRed:0.88 green:0.23 blue:0.19 alpha:1.0];
 	}
@@ -194,7 +191,7 @@ static UIColor *BMManagedBatteryViewTextColor(_UIBatteryView *batteryView) {
 	if (BMManagedBatteryViewIsInLowPowerMode()) {
 		return UIColor.blackColor;
 	}
-	if (BMManagedBatteryViewIsCharging() || BMManagedBatteryViewIsLowLevel()) {
+	if (BMManagedBatteryViewIsLowLevel()) {
 		return UIColor.whiteColor;
 	}
 	if (BMManagedBatteryViewIsActive(batteryView)) {
@@ -240,56 +237,6 @@ static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat m
 		if (ceil(CGRectGetWidth(textRect)) <= targetWidth) {
 			break;
 		}
-	}
-	return bestFont;
-}
-
-static UIFont *BMManagedBatteryViewVariableWidthFont(UIFont *baseFont, CGFloat fontSize, CGFloat widthTrait) {
-	if (!baseFont) {
-		baseFont = [UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold];
-	}
-
-	baseFont = [baseFont fontWithSize:fontSize];
-	NSMutableDictionary *traits = [NSMutableDictionary dictionary];
-	NSDictionary *existingTraits = [baseFont.fontDescriptor objectForKey:UIFontDescriptorTraitsAttribute];
-	if ([existingTraits isKindOfClass:[NSDictionary class]]) {
-		[traits addEntriesFromDictionary:existingTraits];
-	}
-	traits[UIFontWidthTrait] = @(widthTrait);
-	UIFontDescriptor *descriptor = [baseFont.fontDescriptor fontDescriptorByAddingAttributes:@{
-		UIFontDescriptorTraitsAttribute: traits
-	}];
-	UIFont *font = [UIFont fontWithDescriptor:descriptor size:fontSize];
-	return font ?: baseFont;
-}
-
-static UIFont *BMManagedBatteryViewInterpolatedFontToFitWidth(UIFont *baseFont, CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText, CGFloat *resolvedWidthTrait) {
-	if (targetWidth <= 1.0) {
-		targetWidth = 18.0;
-	}
-
-	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
-	CGFloat bestWidthTrait = 0.0;
-	UIFont *bestFont = BMManagedBatteryViewVariableWidthFont(baseFont, minFontSize, bestWidthTrait);
-	for (CGFloat fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
-		for (CGFloat widthTrait = 0.0; widthTrait >= -0.40; widthTrait -= 0.04) {
-			UIFont *font = BMManagedBatteryViewVariableWidthFont(baseFont, fontSize, widthTrait);
-			CGRect textRect = [referenceText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 40.0)
-				options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-				attributes:@{ NSFontAttributeName: font }
-				context:nil];
-			bestFont = font;
-			bestWidthTrait = widthTrait;
-			if (ceil(CGRectGetWidth(textRect)) <= targetWidth) {
-				if (resolvedWidthTrait) {
-					*resolvedWidthTrait = bestWidthTrait;
-				}
-				return bestFont;
-			}
-		}
-	}
-	if (resolvedWidthTrait) {
-		*resolvedWidthTrait = bestWidthTrait;
 	}
 	return bestFont;
 }
@@ -420,7 +367,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 	}
 
 	UIImageView *overlayBoltImageView = BMOverlayBoltImageViewForBatteryView(batteryView);
-	if (overlayBoltImageView && !visible) {
+	if (overlayBoltImageView) {
 		overlayBoltImageView.hidden = YES;
 		overlayBoltImageView.alpha = 0.0;
 	}
@@ -486,59 +433,25 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			label.hidden = YES;
 			label.alpha = 0.0;
 			boltImageView.hidden = YES;
+
 			if (displayText.length > 0) {
-				if (BMManagedBatteryViewIsCharging()) {
-					CGFloat boltReservedWidth = 7.5;
-					CGFloat spacing = -1.0;
-					CGFloat chargingWidthTrait = 0.0;
-					UIFont *chargingFont = BMManagedBatteryViewInterpolatedFontToFitWidth(label.font, MAX(8.0, overlayWidth - boltReservedWidth - spacing), maxFontSize + 1.125, @"100", &chargingWidthTrait);
-					BMConfigureOverlayLabel(overlayLabel, textColor, useCutoutText);
-					overlayLabel.font = chargingFont;
-					overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
-						NSForegroundColorAttributeName: textColor,
-						NSFontAttributeName: chargingFont
-					}];
-					CGRect textRect = [displayText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 40.0)
-						options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-						attributes:@{ NSFontAttributeName: chargingFont }
-						context:nil];
-					UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:chargingFont.pointSize weight:UIImageSymbolWeightBold];
-					UIImage *boltImage = [UIImage systemImageNamed:@"bolt.fill" withConfiguration:configuration];
-					boltImage = [boltImage imageWithTintColor:textColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-					CGFloat boltHeight = chargingFont.capHeight + 1.0;
-					CGFloat boltWidth = boltImage ? (boltImage.size.width * (boltHeight / MAX(boltImage.size.height, 1.0))) : boltReservedWidth;
-					CGFloat totalWidth = ceil(CGRectGetWidth(textRect)) + spacing + ceil(boltWidth);
-					CGFloat groupStartX = floor(CGRectGetMidX(containerFrame) - (totalWidth * 0.5));
-					CGFloat textHeight = ceil(CGRectGetHeight(textRect));
-					CGFloat textY = CGRectGetMidY(containerFrame) - (textHeight * 0.5) - 0.5;
-					overlayLabel.frame = CGRectMake(groupStartX, textY, ceil(CGRectGetWidth(textRect)) + 1.0, MAX(CGRectGetHeight(containerFrame), textHeight));
-					overlayBoltImageView.image = boltImage;
-					overlayBoltImageView.hidden = NO;
-					overlayBoltImageView.frame = CGRectMake(CGRectGetMaxX(overlayLabel.frame) + spacing,
-						CGRectGetMidY(overlayLabel.frame) - (boltHeight * 0.5) - 0.5,
-						ceil(boltWidth),
-						ceil(boltHeight));
-					overlayBoltImageView.alpha = 1.0;
-					overlayLabel.transform = CGAffineTransformIdentity;
-					overlayBoltImageView.transform = CGAffineTransformIdentity;
-					[batteryView bringSubviewToFront:overlayLabel];
-					[batteryView bringSubviewToFront:overlayBoltImageView];
-				} else {
-					UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
-					BMConfigureOverlayLabel(overlayLabel, textColor, useCutoutText);
-					overlayLabel.font = normalFont;
-					overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
-					overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
-						NSForegroundColorAttributeName: textColor,
-						NSFontAttributeName: normalFont
-					}];
-					overlayLabel.hidden = NO;
-					overlayLabel.alpha = 1.0;
-					overlayLabel.transform = CGAffineTransformIdentity;
-					overlayBoltImageView.hidden = YES;
-					overlayBoltImageView.transform = CGAffineTransformIdentity;
-					[batteryView bringSubviewToFront:overlayLabel];
-				}
+				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
+				BMConfigureOverlayLabel(overlayLabel, textColor, useCutoutText);
+				overlayLabel.font = normalFont;
+				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
+				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
+					NSForegroundColorAttributeName: textColor,
+					NSFontAttributeName: normalFont
+				}];
+				overlayLabel.hidden = NO;
+				overlayLabel.alpha = 1.0;
+				overlayLabel.transform = CGAffineTransformIdentity;
+				
+				// 彻底隐藏任何闪电图标
+				overlayBoltImageView.hidden = YES;
+				overlayBoltImageView.alpha = 0.0;
+				overlayBoltImageView.transform = CGAffineTransformIdentity;
+				[batteryView bringSubviewToFront:overlayLabel];
 			} else {
 				overlayLabel.frame = containerFrame;
 				overlayLabel.attributedText = nil;
@@ -584,7 +497,9 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 	UIDevice *device = [UIDevice currentDevice];
 	device.batteryMonitoringEnabled = YES;
 	float batteryLevel = device.batteryLevel;
-	NSInteger chargingState = (NSInteger)device.batteryState;
+	
+	// 强制传入普通未充电状态 (0)
+	NSInteger chargingState = 0; 
 	BOOL active = BMControllerModuleIsActive(controller);
 	if (batteryView) {
 		BMSetManagedBatteryVisibility(batteryView, YES);
