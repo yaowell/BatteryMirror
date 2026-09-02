@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// 声明系统私有 API 与结构体
+// 声明系统私有 API 与模块类
 @interface _UIBatteryView : UIView
 @property (nonatomic, assign) NSInteger chargingState;
 @property (nonatomic, assign) CGFloat chargePercent;
@@ -13,6 +13,9 @@
 @property (nonatomic, strong) UIColor *boltColor;
 @property (nonatomic, strong) UIColor *fillColor;
 - (instancetype)initWithFrame:(CGRect)frame blursBuffer:(BOOL)blursBuffer;
+@end
+
+@interface CCUILowPowerModuleViewController : UIViewController
 @end
 
 // Associated Object 静态指针 Key
@@ -29,18 +32,20 @@ static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
 }
 
 // 获取或创建咱们自定义的电池视图
-static _UIBatteryView *BMBatteryViewForController(UIViewController *controller) {
-    if (!controller.isViewLoaded) return nil;
-    _UIBatteryView *batteryView = objc_getAssociatedObject(controller, BMManagedBatteryViewKey);
+static _UIBatteryView *BMBatteryViewForController(id controller) {
+    UIViewController *vc = (UIViewController *)controller;
+    if (!vc.isViewLoaded) return nil;
+
+    _UIBatteryView *batteryView = objc_getAssociatedObject(vc, BMManagedBatteryViewKey);
     if (!batteryView) {
         batteryView = [[_UIBatteryView alloc] initWithFrame:CGRectZero blursBuffer:NO];
         batteryView.showsInlineChargingIndicator = YES;
         batteryView.showsPercentage = YES;
         batteryView.userInteractionEnabled = NO;
-        objc_setAssociatedObject(controller, BMManagedBatteryViewKey, batteryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(vc, BMManagedBatteryViewKey, batteryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (batteryView.superview != controller.view) {
-        [controller.view addSubview:batteryView];
+    if (batteryView.superview != vc.view) {
+        [vc.view addSubview:batteryView];
     }
     return batteryView;
 }
@@ -74,12 +79,13 @@ static void BMHideStockLowPowerArtworkRecursive(UIView *view, _UIBatteryView *ou
 }
 
 // 统一对外控制隐藏/恢复的入口
-static void BMSetStockLowPowerArtworkHidden(UIViewController *controller, BOOL hidden) {
-    _UIBatteryView *batteryView = BMBatteryViewForController(controller);
+static void BMSetStockLowPowerArtworkHidden(id controller, BOOL hidden) {
+    UIViewController *vc = (UIViewController *)controller;
+    _UIBatteryView *batteryView = BMBatteryViewForController(vc);
     if (hidden) {
-        BMHideStockLowPowerArtworkRecursive(controller.view, batteryView);
+        BMHideStockLowPowerArtworkRecursive(vc.view, batteryView);
     } else {
-        BMEnumerateSubviews(controller.view, ^(UIView *subview) {
+        BMEnumerateSubviews(vc.view, ^(UIView *subview) {
             NSNumber *tag = objc_getAssociatedObject(subview, BMHiddenStockArtworkTagKey);
             if ([tag boolValue]) {
                 subview.hidden = NO;
@@ -91,27 +97,26 @@ static void BMSetStockLowPowerArtworkHidden(UIViewController *controller, BOOL h
 }
 
 // 重新布局电池视图（适配一级模块与二级展开菜单）
-static void BMLayoutBatteryView(UIViewController *controller) {
-    _UIBatteryView *batteryView = BMBatteryViewForController(controller);
+static void BMLayoutBatteryView(id controller) {
+    UIViewController *vc = (UIViewController *)controller;
+    _UIBatteryView *batteryView = BMBatteryViewForController(vc);
     if (!batteryView) return;
 
-    [controller.view bringSubviewToFront:batteryView];
+    [vc.view bringSubviewToFront:batteryView];
 
-    CGRect bounds = controller.view.bounds;
+    CGRect bounds = vc.view.bounds;
     if (CGRectIsEmpty(bounds)) return;
 
     // 判断是否处于二级展开菜单状态
     BOOL isExpandedMenu = (bounds.size.height > 120.0);
 
-    // 0.25 适配二级菜单高度，避免遮挡“低耗电模式”文字
+    // 0.25 适配二级菜单高度，精准避开“低耗电模式”文本
     CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
     CGPoint centerPoint = CGPointMake(bounds.size.width * 0.50, bounds.size.height * yRatio);
 
     // 基础尺寸定义
     CGFloat baseWidth = 35.0;
     CGFloat baseHeight = 19.0;
-    
-    // 保持 1.30 倍适度放大
     CGFloat scale = 1.30;
     
     batteryView.bounds = CGRectMake(0, 0, baseWidth, baseHeight);
@@ -120,14 +125,15 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 }
 
 // 刷新电量数据与样式
-static void BMRefreshLowPowerLabel(UIViewController *controller) {
-    if (!controller.isViewLoaded) return;
+static void BMRefreshLowPowerLabel(id controller) {
+    UIViewController *vc = (UIViewController *)controller;
+    if (!vc.isViewLoaded) return;
 
     // 1. 触发原生图标隐藏逻辑
-    BMSetStockLowPowerArtworkHidden(controller, YES);
+    BMSetStockLowPowerArtworkHidden(vc, YES);
 
     // 2. 更新系统电池组件数据
-    _UIBatteryView *batteryView = BMBatteryViewForController(controller);
+    _UIBatteryView *batteryView = BMBatteryViewForController(vc);
     if (!batteryView) return;
 
     [UIDevice currentDevice].batteryMonitoringEnabled = YES;
@@ -149,7 +155,7 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
     batteryView.boltColor = [UIColor blackColor];
 
     // 3. 重新绘制布局
-    BMLayoutBatteryView(controller);
+    BMLayoutBatteryView(vc);
 }
 
 // Hook 控制中心低电量模块控制器
