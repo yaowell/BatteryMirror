@@ -278,22 +278,32 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
+	CGFloat viewWidth = CGRectGetWidth(bounds);
 	CGFloat viewHeight = CGRectGetHeight(bounds);
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
+	
+	if (viewWidth <= 0 || viewHeight <= 0) return;
+
+	CGFloat width = 31.0;
 	CGFloat height = 16.0;
-	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
+
+	CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+	CGFloat baseScale = 1.30;
 	
-	// 判断是二级展开菜单（高度较大）还是一级快捷按钮
+	if (screenWidth > 420.0) {
+		baseScale = 1.55;
+	} else if (screenWidth < 380.0) {
+		baseScale = 1.15;
+	}
+
+	CGFloat x = floor((viewWidth - width) * 0.5);
+	
 	BOOL isExpandedMenu = viewHeight > 120.0;
-	
-	// 二级菜单使用 0.43 向上抬高，一级按钮使用 0.50 精准垂直居中
 	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	
-	/* 放大倍率：1.30 代表 1.3 倍大 */
-	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
+	batteryView.transform = CGAffineTransformMakeScale(baseScale, baseScale);
+
 	[controller.view bringSubviewToFront:batteryView];
 }
 
