@@ -8,4 +8,4 @@ Description: Mirrors the statusbar battery on the Low Power Mode toggle in Contr
 Maintainer: futur3sn0w
 Author: futur3sn0w
 Section: Tweaks
-Depends: firmware (>= 15.0), mobilesubstrate, preferenceloader
+Depends: firmware (>= 15.0), preferenceloader
