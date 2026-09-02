@@ -1,3 +1,9 @@
+哈哈，赶紧刷回刚才稳定编译的那版！看来把 dealloc 顺序颠倒或者加了通知锁之后，系统控制中心在生命周期释放和重新初始化时触发了异常。
+问题主要出在刚才改的那两处：
+ 1. **%orig 放在 dealloc 最前面**：在 Logolicious/Logos 的 Hook 机制里，调用 %orig 后当前对象的内部资源就已经开始销毁了，紧接着再调用 removeObserver:self，self 指针此时可能已经不合法，直接导致线程崩掉或者拦截失效。
+ 2. **通知锁阻止了重新绑定**：控制中心模块的 ViewController 在滑出/收起时会被系统反复销毁与重建，加了静态 Key 锁住之后，新建的实例如果没有正常清理标记，会导致后续彻底收不到电量变动通知。
+我们直接还原回刚才**在 GitHub Actions 上编译成功且逻辑最稳**的版本（只保留 id 类型转换和前置类声明，不乱动 dealloc 和通知锁）：
+```objc
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
@@ -21,7 +27,6 @@
 // Associated Object 静态指针 Key
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMHiddenStockArtworkTagKey = (void *)&BMHiddenStockArtworkTagKey;
-static void *const BMNotificationObservedKey = (void *)&BMNotificationObservedKey;
 
 // 辅助函数：深度递归遍历子视图
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -165,14 +170,10 @@ static void BMRefreshLowPowerLabel(id controller) {
 - (void)viewDidLoad {
     %orig;
     BMRefreshLowPowerLabel(self);
-    
-    NSNumber *obs = objc_getAssociatedObject(self, BMNotificationObservedKey);
-    if (!obs.boolValue) {
-        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
-        [nc addObserver:self selector:@selector(bm_updateBatteryState) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
-        [nc addObserver:self selector:@selector(bm_updateBatteryState) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
-        objc_setAssociatedObject(self, BMNotificationObservedKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+
+    NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+    [nc addObserver:self selector:@selector(bm_updateBatteryState) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
+    [nc addObserver:self selector:@selector(bm_updateBatteryState) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
 }
 
 - (void)viewWillLayoutSubviews {
@@ -193,8 +194,11 @@ static void BMRefreshLowPowerLabel(id controller) {
 }
 
 - (void)dealloc {
-    %orig;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    %orig;
 }
 
 %end
+
+```
+换回这版，重新打个包刷上，绝对就能正常运行了！理论上的“防重”有时反而会破坏控制中心原本的复用机制，还是原生调用顺序最稳。
