@@ -10,7 +10,3 @@ BatteryMirrorPrefs_CFLAGS = -fobjc-arc
 BatteryMirrorPrefs_RESOURCE_DIRS = Resources
 
 include $(THEOS_MAKE_PATH)/bundle.mk
-
-after-BatteryMirrorPrefs-stage::
-	$(ECHO_NOTHING)mkdir -p "$(THEOS_STAGING_DIR)/Library/PreferenceBundles"
-	$(ECHO_NOTHING)cp "Resources/BatteryMirrorPrefs.plist" "$(THEOS_STAGING_DIR)/Library/PreferenceBundles/"
