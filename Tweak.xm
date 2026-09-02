@@ -287,7 +287,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	BOOL isExpandedMenu = viewHeight > 120.0;
 	
 	// 二级菜单使用 0.43 向上抬高，一级按钮使用 0.50 精准垂直居中
-	CGFloat yRatio = isExpandedMenu ? 0.43 : 0.50;
+	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
