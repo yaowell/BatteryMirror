@@ -12,7 +12,6 @@ static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
 static void *const BMBoltImageViewKey = (void *)&BMBoltImageViewKey;
 static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
 static void *const BMOverlayBoltImageViewKey = (void *)&BMOverlayBoltImageViewKey;
-static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMManagedBatteryViewActiveKey = (void *)&BMManagedBatteryViewActiveKey;
 static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
@@ -265,7 +264,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat baseScale = 1.25;
 
 	if (screenWidth >= 420.0) {
-		baseScale = 1.42;
+		baseScale = 1.35;
 	} else if (screenWidth < 380.0) {
 		baseScale = 1.15;
 	}
@@ -282,29 +281,12 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	[controller.view bringSubviewToFront:batteryView];
 }
 
-static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
-	if (!layer) {
-		return NO;
-	}
-
-	CGRect bounds = layer.bounds;
-	CGFloat width = CGRectGetWidth(bounds);
-	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
-}
-
-static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
-	if (!layer) {
-		return;
-	}
-
-	if (BMShouldRoundBatteryLayer(layer)) {
-		layer.cornerRadius = MIN(radius, CGRectGetHeight(layer.bounds) * 0.5);
-		layer.masksToBounds = radius > 0.0;
-	}
-
+// 递归解锁所有 Layer 层的 masksToBounds，确保右侧 Pin 和 Body 绝对不被切断
+static void BMUnlockLayerClipping(CALayer *layer) {
+	if (!layer) return;
+	layer.masksToBounds = NO;
 	for (CALayer *sublayer in layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, radius);
+		BMUnlockLayerClipping(sublayer);
 	}
 }
 
@@ -339,8 +321,9 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
 	UIColor *pinColor = bodyColor;
 
+	// 强制电池主视图以及所有子图层不切边
 	batteryView.clipsToBounds = NO;
-	batteryView.layer.masksToBounds = NO;
+	BMUnlockLayerClipping(batteryView.layer);
 
 	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
 		[batteryView setInternalSizeCategory:1];
@@ -367,10 +350,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setPinColorAlpha:1.0];
 	}
 
-	for (CALayer *sublayer in batteryView.layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
-	}
-
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
 		if ([subview isKindOfClass:[UILabel class]]) {
 			UILabel *label = (UILabel *)subview;
@@ -379,12 +358,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			if (label == overlayLabel) {
 				return;
 			}
-
-			// 获取并锁定系统原生 Label 的初始 Frame 基准
-			if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
-				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:label.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-			}
-			CGRect containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
 
 			UIImageView *boltImageView = BMEnsureBoltImageView(batteryView);
 			label.hidden = YES;
@@ -397,16 +370,15 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 				BOOL useCutoutText = BMManagedBatteryViewUsesCutoutText(batteryView);
 
-				UIFont *font = [UIFont boldSystemFontOfSize:(displayText.length >= 3 ? 8.0 : 9.5)];
+				// 精准紧凑字号：两位数 9.0pt，三位数 7.5pt
+				UIFont *font = [UIFont boldSystemFontOfSize:(displayText.length >= 3 ? 7.5 : 9.0)];
 
 				BMConfigureOverlayLabel(overlayLabel, textColor, useCutoutText);
 				overlayLabel.font = font;
 
-				// 基于 containerFrame 动态居中算，并修正 1px 消除偏心
-				CGFloat overlayWidth = CGRectGetWidth(containerFrame) + 2.0;
-				CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5) - 1.0;
-
-				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
+				// 核心修复：电池内主体框长 27px，除去右侧 Pin 角 4px，有效居中区域为 x: 0 ~ 27。
+				// 强制 Label 在 (0, 0, 27, 16) 内精确居中，绝不借用原生 Label 的偏右坐标！
+				overlayLabel.frame = CGRectMake(0.0, 0.0, 27.0, 16.0);
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
 					NSFontAttributeName: font
