@@ -26,9 +26,18 @@ jobs:
           git clone --depth=1 https://github.com/theos/sdks.git $HOME/theos/sdks
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
+      - name: Fix Private Frameworks
+        run: |
+          # 自动寻找到 iOS SDK 中的 PrivateFrameworks 补全到 Theos SDK 目录
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          if [ -d "$SDK_PATH/System/Library/PrivateFrameworks/Preferences.framework" ]; then
+            mkdir -p $HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
+            cp -R "$SDK_PATH/System/Library/PrivateFrameworks/Preferences.framework" $HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/ || true
+          fi
+
       - name: Build Package
         run: |
-          make clean package THEOS_PACKAGE_SCHEME=roothide TARGET=iphone:clang:latest:15.0
+          make clean package THEOS_PACKAGE_SCHEME=roothide SYSROOT=$HOME/theos/sdks/iPhoneOS16.5.sdk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
