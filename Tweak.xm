@@ -21,6 +21,7 @@
 // Associated Object 静态指针 Key
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMHiddenStockArtworkTagKey = (void *)&BMHiddenStockArtworkTagKey;
+static void *const BMNotificationObservedKey = (void *)&BMNotificationObservedKey;
 
 // 辅助函数：深度递归遍历子视图
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -164,11 +165,14 @@ static void BMRefreshLowPowerLabel(id controller) {
 - (void)viewDidLoad {
     %orig;
     BMRefreshLowPowerLabel(self);
-
-    // 监听电量与低电量模式变化通知
-    NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
-    [nc addObserver:self selector:@selector(bm_updateBatteryState) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
-    [nc addObserver:self selector:@selector(bm_updateBatteryState) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
+    
+    NSNumber *obs = objc_getAssociatedObject(self, BMNotificationObservedKey);
+    if (!obs.boolValue) {
+        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+        [nc addObserver:self selector:@selector(bm_updateBatteryState) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
+        [nc addObserver:self selector:@selector(bm_updateBatteryState) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
+        objc_setAssociatedObject(self, BMNotificationObservedKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
 }
 
 - (void)viewWillLayoutSubviews {
@@ -189,8 +193,8 @@ static void BMRefreshLowPowerLabel(id controller) {
 }
 
 - (void)dealloc {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
     %orig;
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 %end
