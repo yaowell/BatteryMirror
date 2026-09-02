@@ -6,6 +6,6 @@ Description: Mirrors the statusbar battery on the Low Power Mode toggle in Contr
 Maintainer: futur3sn0w
 Author: futur3sn0w
 Section: Tweaks
-Depends: firmware (>= 15.0), preferenceloader
+Depends: firmware (>= 15.0)
 Icon: https://futur3sn0w.github.io/repo/icons/com.futur3sn0w.batterymirror.png
 SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batterymirror.json
