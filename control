@@ -1,6 +1,4 @@
 Package: com.futur3sn0w.batterymirror
-Icon: https://futur3sn0w.github.io/repo/icons/com.futur3sn0w.batterymirror.png
-SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batterymirror.json
 Name: BatteryMirror
 Version: 0.0.4
 Architecture: iphoneos-arm64
@@ -9,3 +7,5 @@ Maintainer: futur3sn0w
 Author: futur3sn0w
 Section: Tweaks
 Depends: firmware (>= 15.0), preferenceloader
+Icon: https://futur3sn0w.github.io/repo/icons/com.futur3sn0w.batterymirror.png
+SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batterymirror.json
