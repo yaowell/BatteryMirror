@@ -1,0 +1,36 @@
+name: Build Roothide Deb
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Setup Theos and Roothide SDK
+        uses: theos/setup-theos-action@v1
+        with:
+          theos-src: theos/theos
+          theos-ref: master
+
+      - name: Download iOS SDK
+        run: |
+          git clone --depth=1 https://github.com/theos/sdks.git $THEOS/sdks
+
+      - name: Build Package
+        run: |
+          make clean package THEOS_PACKAGE_SCHEME=roothide
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: BatteryMirror-Roothide-Deb
+          path: packages/*.deb
