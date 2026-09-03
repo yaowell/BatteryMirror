@@ -25,13 +25,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setPinColor:(UIColor *)color;
 - (void)setInactiveColor:(UIColor *)color;
 - (void)setBoltColor:(UIColor *)color;
-- (UIColor *)_batteryFillColor;
-- (UIColor *)_batteryUnfilledColor;
-- (UIColor *)_batteryTextColor;
-- (UIColor *)bodyColor;
-- (UIColor *)pinColor;
-- (void)setBodyColorAlpha:(double)alpha;
-- (void)setPinColorAlpha:(double)alpha;
 @end
 
 @interface CALayer (BatteryMirrorPrivate)
@@ -203,6 +196,33 @@ static void BMHideStockLowPowerArtwork(UIViewController *controller) {
 	BMSetStockLowPowerArtworkHidden(controller, YES);
 }
 
+static BOOL BMIsLowPowerModuleController(UIViewController *controller) {
+	if (!controller) {
+		return NO;
+	}
+
+	NSString *className = NSStringFromClass(controller.class);
+	if ([className containsString:@"LowPower"]) {
+		return YES;
+	}
+
+	id module = nil;
+	@try {
+		module = [controller valueForKey:@"module"];
+	} @catch (__unused NSException *exception) {
+		module = nil;
+	}
+
+	if (module) {
+		NSString *moduleClassName = NSStringFromClass([module class]);
+		if ([moduleClassName containsString:@"LowPower"]) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
 static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (batteryView) {
@@ -313,12 +333,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if ([batteryView respondsToSelector:@selector(setBoltColor:)]) {
 		[batteryView setBoltColor:fillColor];
 	}
-	if ([batteryView respondsToSelector:@selector(setBodyColorAlpha:)]) {
-		[batteryView setBodyColorAlpha:1.0];
-	}
-	if ([batteryView respondsToSelector:@selector(setPinColorAlpha:)]) {
-		[batteryView setPinColorAlpha:1.0];
-	}
 	
 	for (CALayer *sublayer in batteryView.layer.sublayers) {
 		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
@@ -384,6 +398,10 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller) {
+	if (!BMIsLowPowerModuleController(controller)) {
+		return;
+	}
+
 	BMHideStockLowPowerArtwork(controller);
 
 	_UIBatteryView *batteryView = BMEnsureBatteryView(controller);
@@ -413,6 +431,10 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 }
 
 static void BMTrackController(UIViewController *controller) {
+	if (!BMIsLowPowerModuleController(controller)) {
+		return;
+	}
+
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
 		BMTrackedControllers = [NSHashTable weakObjectsHashTable];
@@ -440,6 +462,10 @@ static void BMRefreshTrackedControllers(NSString *reason) {
 
 static void BMHandleControllerEvent(UIViewController *controller) {
 	if (!controller || !controller.isViewLoaded) {
+		return;
+	}
+
+	if (!BMIsLowPowerModuleController(controller)) {
 		return;
 	}
 
@@ -527,22 +553,21 @@ static void BMHandleControllerEvent(UIViewController *controller) {
 
 %end
 
-// 精准 Hook 低电量控制模块，不再干扰其他无关视图控制器
-%hook CCUILowPowerModuleViewController
+%hook UIViewController
 
 - (void)viewDidLoad {
 	%orig;
-	BMHandleControllerEvent((UIViewController *)self);
+	BMHandleControllerEvent(self);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
 	%orig(animated);
-	BMHandleControllerEvent((UIViewController *)self);
+	BMHandleControllerEvent(self);
 }
 
 - (void)viewDidLayoutSubviews {
 	%orig;
-	BMHandleControllerEvent((UIViewController *)self);
+	BMHandleControllerEvent(self);
 }
 
 %end
