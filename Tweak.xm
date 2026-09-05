@@ -4,8 +4,11 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <notify.h>
 
 static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
+static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
+static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMManagedBatteryViewActiveKey = (void *)&BMManagedBatteryViewActiveKey;
 static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
@@ -13,7 +16,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 @interface _UIBatteryView : UIView
 @property (nonatomic, assign) double chargePercent;
 - (instancetype)initWithSizeCategory:(NSInteger)sizeCategory;
-- (CGSize)intrinsicContentSize;
 - (void)setChargePercent:(double)percent;
 - (void)setShowsPercentage:(BOOL)showsPercentage;
 - (void)setSaverModeActive:(BOOL)active;
@@ -21,16 +23,41 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setBodyColor:(UIColor *)color;
 - (void)setPinColor:(UIColor *)color;
 - (void)setInactiveColor:(UIColor *)color;
-- (void)_updateBodyColors;
-- (void)_updateTransformIfNecessary;
+@end
+
+@interface CALayer (BatteryMirrorPrivate)
+@property (nonatomic, retain) NSString *compositingFilter;
+@property (nonatomic, assign) BOOL allowsGroupOpacity;
+@property (nonatomic, assign) BOOL allowsGroupBlending;
 @end
 
 static _UIBatteryView *BMBatteryViewForController(UIViewController *controller) {
 	return objc_getAssociatedObject(controller, BMBatteryViewKey);
 }
 
+static UILabel *BMOverlayLabelForBatteryView(_UIBatteryView *batteryView) {
+	return objc_getAssociatedObject(batteryView, BMOverlayLabelKey);
+}
+
 static void BMSetBatteryViewForController(UIViewController *controller, _UIBatteryView *batteryView) {
 	objc_setAssociatedObject(controller, BMBatteryViewKey, batteryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
+	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
+	if (overlayLabel) {
+		return overlayLabel;
+	}
+
+	overlayLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+	overlayLabel.userInteractionEnabled = NO;
+	overlayLabel.backgroundColor = UIColor.clearColor;
+	overlayLabel.textAlignment = NSTextAlignmentCenter;
+	overlayLabel.numberOfLines = 1;
+	overlayLabel.adjustsFontSizeToFitWidth = NO;
+	[batteryView addSubview:overlayLabel];
+	objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	return overlayLabel;
 }
 
 static BOOL BMIsManagedBatteryView(_UIBatteryView *batteryView) {
@@ -93,8 +120,56 @@ static UIColor *BMManagedBatteryViewInactiveColor(_UIBatteryView *batteryView) {
 	return [BMManagedBatteryViewBaseColor(batteryView) colorWithAlphaComponent:0.34];
 }
 
+static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, UILabel *label) {
+	float level = [UIDevice currentDevice].batteryLevel;
+	NSInteger percent = level < 0.0f ? 0 : (NSInteger)lroundf(level * 100.0f);
+	return [NSString stringWithFormat:@"%ld", (long)percent];
+}
+
+// 解决 100% 贴边问题：留出 2.5pt 安全 Padding 进行动态字号缩放
+static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText) {
+	if (targetWidth <= 1.0) {
+		targetWidth = 18.0;
+	}
+
+	CGFloat safeTargetWidth = targetWidth - 2.5;
+
+	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
+	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
+	for (CGFloat fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
+		UIFont *font = [UIFont boldSystemFontOfSize:fontSize];
+		CGRect textRect = [referenceText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 40.0)
+			options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+			attributes:@{ NSFontAttributeName: font }
+			context:nil];
+		bestFont = font;
+		if (ceil(CGRectGetWidth(textRect)) <= safeTargetWidth) {
+			break;
+		}
+	}
+	return bestFont;
+}
+
+static CGFloat BMOverlayExtraWidth(void) {
+	return 11.0;
+}
+
+static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
+	overlayLabel.textColor = textColor;
+	overlayLabel.highlightedTextColor = textColor;
+	overlayLabel.tintColor = textColor;
+	overlayLabel.shadowColor = UIColor.clearColor;
+	overlayLabel.layer.shadowOpacity = 0.0;
+	overlayLabel.layer.allowsGroupOpacity = YES;
+	overlayLabel.layer.allowsGroupBlending = NO;
+	overlayLabel.layer.compositingFilter = nil;
+}
+
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
-	if (!view || !block) return;
+	if (!view || !block) {
+		return;
+	}
+
 	block(view);
 	for (UIView *subview in view.subviews) {
 		BMEnumerateSubviews(subview, block);
@@ -116,17 +191,17 @@ static void BMSetStockLowPowerArtworkHidden(UIViewController *controller, BOOL h
 	});
 }
 
-// 确保初始化及图层生成
 static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
-	if (batteryView) return batteryView;
+	if (batteryView) {
+		return batteryView;
+	}
 
 	Class batteryViewClass = objc_getClass("_UIBatteryView");
 	if (!batteryViewClass || ![batteryViewClass instancesRespondToSelector:@selector(initWithSizeCategory:)]) {
 		return nil;
 	}
 
-	// 初始化使用原生 sizeCategory:0 保证外框 shapeLayer 正常绘制
 	batteryView = [(_UIBatteryView *)[batteryViewClass alloc] initWithSizeCategory:0];
 	batteryView.userInteractionEnabled = NO;
 	[controller.view addSubview:batteryView];
@@ -136,34 +211,21 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 原作者居中逻辑：bounds + center + scale(1.37)
+// 绝对几何居中算法：使用 bounds + center 锁定中点，以中心为轴等比放大 1.37 倍
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
-	if (!batteryView || !batteryView.superview) return;
+	if (!batteryView || !batteryView.superview) {
+		return;
+	}
 
 	CGRect bounds = controller.view.bounds;
 	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
 
 	batteryView.transform = CGAffineTransformIdentity;
-
-	CGSize size = CGSizeZero;
-	if ([batteryView respondsToSelector:@selector(intrinsicContentSize)]) {
-		size = [batteryView intrinsicContentSize];
-	}
-	if (size.width <= 0 || size.height <= 0) {
-		size = CGSizeMake(27.0, 12.0);
-	}
-
-	batteryView.bounds = CGRectMake(0, 0, size.width, size.height);
+	batteryView.bounds = CGRectMake(0, 0, 31.0, 16.0);
 
 	CGFloat centerX = CGRectGetWidth(bounds) * 0.5;
-	CGFloat centerY;
-
-	if (isExpanded) {
-		centerY = 35.0 + (size.height * 0.5);
-	} else {
-		centerY = CGRectGetHeight(bounds) * 0.5;
-	}
+	CGFloat centerY = isExpanded ? (35.0 + 8.0) : (CGRectGetHeight(bounds) * 0.5);
 
 	batteryView.center = CGPointMake(centerX, centerY);
 	batteryView.transform = CGAffineTransformMakeScale(1.37, 1.37);
@@ -171,17 +233,15 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	[controller.view bringSubviewToFront:batteryView];
 }
 
-// 强制刷出电池图标与内部组件
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
-	if (!batteryView) return;
+	if (!batteryView) {
+		return;
+	}
 
 	UIColor *fillColor = BMManagedBatteryViewFillColor(batteryView);
 	UIColor *bodyColor = BMManagedBatteryViewBodyColor(batteryView);
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
 
-	if ([batteryView respondsToSelector:@selector(setShowsPercentage:)]) {
-		[batteryView setShowsPercentage:YES];
-	}
 	if ([batteryView respondsToSelector:@selector(setFillColor:)]) {
 		[batteryView setFillColor:fillColor];
 	}
@@ -195,11 +255,50 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setInactiveColor:inactiveColor];
 	}
 
-	// 保证图标子视图（电池外框和电量条）不被隐蔽
-	for (UIView *subview in batteryView.subviews) {
-		subview.hidden = NO;
-		subview.alpha = 1.0;
-	}
+	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
+		if ([subview isKindOfClass:[UILabel class]]) {
+			UILabel *label = (UILabel *)subview;
+			UILabel *overlayLabel = BMEnsureOverlayLabel(batteryView);
+			if (label == overlayLabel) {
+				return;
+			}
+
+			CGRect containerFrame = label.frame;
+			if (CGRectGetWidth(containerFrame) <= 1.0 || CGRectGetHeight(containerFrame) <= 1.0) {
+				containerFrame = CGRectMake(2.0, 2.0, 27.0, 12.0);
+			} else if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
+				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:containerFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+			} else {
+				containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
+			}
+
+			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
+			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
+			CGFloat maxFontSize = label.font.pointSize > 0 ? (label.font.pointSize + 7.0) : 14.0;
+			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
+			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
+
+			label.hidden = YES;
+			label.alpha = 0.0;
+
+			if (displayText.length > 0) {
+				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
+				BMConfigureOverlayLabel(overlayLabel, textColor);
+				overlayLabel.font = normalFont;
+				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
+				overlayLabel.text = displayText;
+				overlayLabel.hidden = NO;
+				overlayLabel.alpha = 1.0;
+				overlayLabel.transform = CGAffineTransformIdentity;
+				[batteryView bringSubviewToFront:overlayLabel];
+			} else {
+				overlayLabel.frame = containerFrame;
+				overlayLabel.text = nil;
+				overlayLabel.hidden = YES;
+				overlayLabel.alpha = 0.0;
+			}
+		}
+	});
 }
 
 static BOOL BMControllerModuleIsActive(UIViewController *controller) {
@@ -220,7 +319,9 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller) {
-	if (!controller || !controller.isViewLoaded) return;
+	if (!controller || !controller.isViewLoaded) {
+		return;
+	}
 
 	BMSetStockLowPowerArtworkHidden(controller, YES);
 
@@ -236,6 +337,9 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 		[batteryView setChargePercent:(batteryLevel < 0.0f ? 0.0 : batteryLevel)];
 		if ([batteryView respondsToSelector:@selector(setSaverModeActive:)]) {
 			[batteryView setSaverModeActive:active];
+		}
+		if ([batteryView respondsToSelector:@selector(setShowsPercentage:)]) {
+			[batteryView setShowsPercentage:YES];
 		}
 		BMSetManagedBatteryViewActive(batteryView, active);
 		BMApplyBatteryStyling(batteryView);
@@ -270,13 +374,18 @@ static void BMRefreshTrackedControllers(NSString *reason) {
 	}
 
 	for (UIViewController *controller in BMTrackedControllers) {
-		if (!controller || !controller.isViewLoaded) continue;
+		if (!controller || !controller.isViewLoaded) {
+			continue;
+		}
+
 		BMRefreshLowPowerLabel(controller);
 	}
 }
 
 static void BMHandleControllerEvent(UIViewController *controller, NSString *eventName) {
-	if (!BMIsLowPowerModuleController(controller) || !controller.isViewLoaded) return;
+	if (!BMIsLowPowerModuleController(controller) || !controller.isViewLoaded) {
+		return;
+	}
 
 	BMTrackController(controller);
 	BMRefreshLowPowerLabel(controller);
@@ -289,7 +398,9 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 
 - (instancetype)init {
 	self = [super init];
-	if (!self) return nil;
+	if (!self) {
+		return nil;
+	}
 
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(handlePowerStateChange:) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
@@ -321,6 +432,7 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	if (BMIsManagedBatteryView(self)) {
 		return BMManagedBatteryViewFillColor(self);
 	}
+
 	return %orig;
 }
 
@@ -328,6 +440,7 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	if (BMIsManagedBatteryView(self)) {
 		return BMManagedBatteryViewTextColor(self);
 	}
+
 	return %orig;
 }
 
@@ -335,6 +448,7 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	if (BMIsManagedBatteryView(self)) {
 		return BMManagedBatteryViewInactiveColor(self);
 	}
+
 	return %orig;
 }
 
@@ -342,6 +456,7 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	if (BMIsManagedBatteryView(self)) {
 		return BMManagedBatteryViewBodyColor(self);
 	}
+
 	return %orig;
 }
 
@@ -349,6 +464,7 @@ static void BMHandleControllerEvent(UIViewController *controller, NSString *even
 	if (BMIsManagedBatteryView(self)) {
 		return BMManagedBatteryViewBodyColor(self);
 	}
+
 	return %orig;
 }
 
