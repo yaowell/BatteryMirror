@@ -45,7 +45,9 @@ static void BMSetBatteryViewForController(UIViewController *controller, _UIBatte
 	objc_setAssociatedObject(controller, BMBatteryViewKey, batteryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
+// 核心改动 1：文字挂载在 controller.view 上，脱离电池自身不对称坐标系
+static UILabel *BMEnsureOverlayLabel(UIViewController *controller) {
+	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
 	if (overlayLabel) {
 		return overlayLabel;
@@ -55,11 +57,13 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
 	overlayLabel.userInteractionEnabled = NO;
 	overlayLabel.backgroundColor = UIColor.clearColor;
 	overlayLabel.textAlignment = NSTextAlignmentCenter;
-	overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters; // 强制文字按垂直中心线对齐
+	overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
 	overlayLabel.contentMode = UIViewContentModeCenter;
 	overlayLabel.numberOfLines = 1;
 	overlayLabel.adjustsFontSizeToFitWidth = NO;
-	[batteryView addSubview:overlayLabel];
+
+	[controller.view addSubview:overlayLabel];
+	
 	objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 	return overlayLabel;
 }
@@ -241,7 +245,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 终极布局：保证电池图标在任何形态下 100% 几何居中且不破坏二级菜单
+// 核心改动 2：统一通过模块中心点 targetCenter 同步定位图标和文字
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -251,25 +255,28 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGRect bounds = controller.view.bounds;
 	CGFloat viewHeight = CGRectGetHeight(bounds);
 	
-	// 动态计算 headerHeight：
-	// 在展开二级菜单（viewHeight > 120.0）时，将顶部 70pt 视为 Header 区域；
-	// 未展开时，整个卡片都是图标区域。
+	// 二级菜单与未展开态判定
 	CGFloat headerHeight = (viewHeight > 120.0) ? 70.0 : viewHeight;
 
 	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
 	CGFloat height = 16.0;
 
-	// 锁定绝对几何中心点
+	// 模块几何中心点
 	CGPoint targetCenter = CGPointMake(CGRectGetWidth(bounds) * 0.5, headerHeight * 0.5);
 
-	// 采用 bounds + center 方式设置坐标，规避矩阵缩放带来的 Frame Origin 计算偏差
+	// 1. 设置电池居中并放大 1.40
 	batteryView.transform = CGAffineTransformIdentity;
 	batteryView.bounds = CGRectMake(0, 0, width, height);
 	batteryView.center = targetCenter;
-	
-	// 以绝对中心点进行 1.4 倍等比例放大
 	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
 	[controller.view bringSubviewToFront:batteryView];
+
+	// 2. 强制文字中心点与电池中心点重合
+	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
+	if (overlayLabel) {
+		overlayLabel.center = targetCenter;
+		[controller.view bringSubviewToFront:overlayLabel];
+	}
 }
 
 static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visible) {
@@ -287,7 +294,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 	}
 }
 
-// 终极样式与字体布局：扣除极针影响，实现文字绝对垂直+水平居中
+// 核心改动 3：恢复图标 1.4 / 文字 11.1pt 基准，严格同心绝对居中
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
 		return;
@@ -317,48 +324,41 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setBoltColor:fillColor];
 	}
 
-	// 隐藏系统可能自带的百分比 Label
+	// 隐藏系统可能自带的 UILabel
 	for (UIView *subview in batteryView.subviews) {
 		if ([subview isKindOfClass:[UILabel class]]) {
-			UILabel *label = (UILabel *)subview;
-			UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
-			if (label != overlayLabel) {
-				label.hidden = YES;
-				label.alpha = 0.0;
-			}
+			subview.hidden = YES;
+			subview.alpha = 0.0;
 		}
 	}
 
-	UILabel *overlayLabel = BMEnsureOverlayLabel(batteryView);
+	// 查找当前控件的 Controller
+	UIResponder *responder = batteryView.nextResponder;
+	while (responder && ![responder isKindOfClass:[UIViewController class]]) {
+		responder = responder.nextResponder;
+	}
+	UIViewController *controller = (UIViewController *)responder;
+	if (!controller) {
+		return;
+	}
+
+	UILabel *overlayLabel = BMEnsureOverlayLabel(controller);
 	NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView);
 
 	if (displayText.length > 0) {
-		CGRect batteryBounds = batteryView.bounds;
-		CGFloat totalWidth = CGRectGetWidth(batteryBounds);
-		CGFloat totalHeight = CGRectGetHeight(batteryBounds);
-
-		// 精准扣除 _UIBatteryView 右侧 2.5pt 的电池极针（Pin）物理宽度
-		CGFloat pinWidth = 2.5; 
-		CGFloat bodyWidth = totalWidth - pinWidth; 
-
-		// 计算电池主体的物理几何中心
-		CGPoint bodyCenter = CGPointMake(bodyWidth * 0.5, totalHeight * 0.5);
-
-		CGFloat maxFontSize = 10.0; // 设置最佳上限字号，确保三位数 "100" 完美容纳
+		// 恢复原设定的 11.1pt 最大字号
+		CGFloat maxFontSize = 11.1; 
 		UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
-		UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(bodyWidth, maxFontSize, @"100");
+		UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(40.0, maxFontSize, @"100");
 		
 		BMConfigureOverlayLabel(overlayLabel, textColor);
 		overlayLabel.font = normalFont;
 		
-		// 消除系统基线渲染留白偏差
-		overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
-		overlayLabel.contentMode = UIViewContentModeCenter;
-
-		// 将 Label 中心点精确绑定在电池主体的几何中心
 		overlayLabel.transform = CGAffineTransformIdentity;
-		overlayLabel.bounds = CGRectMake(0, 0, bodyWidth, totalHeight);
-		overlayLabel.center = bodyCenter;
+		overlayLabel.bounds = CGRectMake(0, 0, 40.0, 20.0);
+		
+		// 与电池图标共享绝对 center
+		overlayLabel.center = batteryView.center;
 
 		overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 			NSForegroundColorAttributeName: textColor,
@@ -366,7 +366,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		}];
 		overlayLabel.hidden = NO;
 		overlayLabel.alpha = 1.0;
-		[batteryView bringSubviewToFront:overlayLabel];
+		[controller.view bringSubviewToFront:overlayLabel];
 	} else {
 		overlayLabel.bounds = CGRectZero;
 		overlayLabel.attributedText = nil;
