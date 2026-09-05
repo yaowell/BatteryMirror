@@ -21,6 +21,8 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setBodyColor:(UIColor *)color;
 - (void)setPinColor:(UIColor *)color;
 - (void)setInactiveColor:(UIColor *)color;
+- (void)_updateBodyColors;
+- (void)_updateTransformIfNecessary;
 @end
 
 static _UIBatteryView *BMBatteryViewForController(UIViewController *controller) {
@@ -114,7 +116,7 @@ static void BMSetStockLowPowerArtworkHidden(UIViewController *controller, BOOL h
 	});
 }
 
-// 采用 iOS 状态栏原生标准尺寸分类 (sizeCategory: 1)
+// 确保初始化及图层生成
 static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (batteryView) return batteryView;
@@ -124,7 +126,8 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 		return nil;
 	}
 
-	batteryView = [(_UIBatteryView *)[batteryViewClass alloc] initWithSizeCategory:1];
+	// 初始化使用原生 sizeCategory:0 保证外框 shapeLayer 正常绘制
+	batteryView = [(_UIBatteryView *)[batteryViewClass alloc] initWithSizeCategory:0];
 	batteryView.userInteractionEnabled = NO;
 	[controller.view addSubview:batteryView];
 	BMSetBatteryViewForController(controller, batteryView);
@@ -133,7 +136,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 严格还原原作者 bounds + center + transform 的几何居中算法
+// 原作者居中逻辑：bounds + center + scale(1.37)
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) return;
@@ -141,10 +144,8 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGRect bounds = controller.view.bounds;
 	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
 
-	// 1. 先重置 transform，保证 bounds 和 center 计算的绝对真实
 	batteryView.transform = CGAffineTransformIdentity;
 
-	// 2. 获取原生本征尺寸
 	CGSize size = CGSizeZero;
 	if ([batteryView respondsToSelector:@selector(intrinsicContentSize)]) {
 		size = [batteryView intrinsicContentSize];
@@ -153,30 +154,24 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 		size = CGSizeMake(27.0, 12.0);
 	}
 
-	// 3. 设定自身的 bounds 尺寸
 	batteryView.bounds = CGRectMake(0, 0, size.width, size.height);
 
-	// 4. 原作者的 Center 计算逻辑
 	CGFloat centerX = CGRectGetWidth(bounds) * 0.5;
 	CGFloat centerY;
 
 	if (isExpanded) {
-		// 二级菜单展开，锁定顶部 y = 35.0 (结合 Center 换算)
 		centerY = 35.0 + (size.height * 0.5);
 	} else {
-		// 未展开状态，强行对齐模块几何中心点 (绝对居中)
 		centerY = CGRectGetHeight(bounds) * 0.5;
 	}
 
 	batteryView.center = CGPointMake(centerX, centerY);
-
-	// 5. 施加 1.37 倍等比放大（基于中心点扩展，几何位置零偏移）
 	batteryView.transform = CGAffineTransformMakeScale(1.37, 1.37);
 
 	[controller.view bringSubviewToFront:batteryView];
 }
 
-// 完全不修改内部 Label，100% 保持原生状态栏内部边距与字体比例
+// 强制刷出电池图标与内部组件
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) return;
 
@@ -198,6 +193,12 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	}
 	if ([batteryView respondsToSelector:@selector(setInactiveColor:)]) {
 		[batteryView setInactiveColor:inactiveColor];
+	}
+
+	// 保证图标子视图（电池外框和电量条）不被隐蔽
+	for (UIView *subview in batteryView.subviews) {
+		subview.hidden = NO;
+		subview.alpha = 1.0;
 	}
 }
 
