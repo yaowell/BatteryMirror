@@ -54,7 +54,7 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
 	overlayLabel = [[UILabel alloc] initWithFrame:CGRectZero];
 	overlayLabel.userInteractionEnabled = NO;
 	overlayLabel.backgroundColor = UIColor.clearColor;
-	overlayLabel.textAlignment = NSTextAlignmentCenter;
+	overlayLabel.textAlignment = NSTextAlignmentCenter; // 确保水平居中
 	overlayLabel.numberOfLines = 1;
 	overlayLabel.adjustsFontSizeToFitWidth = NO;
 	[batteryView addSubview:overlayLabel];
@@ -139,6 +139,7 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
 	overlayLabel.layer.allowsGroupOpacity = YES;
 	overlayLabel.layer.allowsGroupBlending = NO;
 	overlayLabel.layer.compositingFilter = nil;
+	overlayLabel.textAlignment = NSTextAlignmentCenter; // 强行对齐居中
 }
 
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -225,17 +226,21 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
+	CGFloat viewWidth = CGRectGetWidth(bounds);
 	CGFloat viewHeight = CGRectGetHeight(bounds);
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
+	
+	CGFloat width = MIN(viewWidth - 8.0, 31.0);
 	CGFloat height = 16.0;
-	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
+	
+	// 绝对居中算法：电池包含约 2.0pt 的右侧极针，向右微调 1.0pt 补偿，使主体矩形完美居中
+	CGFloat pinCompensation = 1.0;
+	CGFloat x = floor((viewWidth - width) * 0.5) + pinCompensation;
 	
 	BOOL isExpandedMenu = viewHeight > 120.0;
 	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	// 使用统一 Scale 整体放大 1.40 倍，确保电池内部所有组件（框、填满区域、极针）等比例缩放
 	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
 	[controller.view bringSubviewToFront:batteryView];
 }
@@ -281,7 +286,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setBoltColor:fillColor];
 	}
 
-	// 隐藏原生的子控件（特别是自带的 label），并精准布局自定义 Label
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
 		if ([subview isKindOfClass:[UILabel class]]) {
 			UILabel *label = (UILabel *)subview;
@@ -290,7 +294,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 			
-			// 隐藏原生文字
 			label.hidden = YES;
 			label.alpha = 0.0;
 
@@ -302,10 +305,11 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = fixedFont;
 				
-				// 精准居中挂载在 batteryView 的 bounds 内（除去右侧 3pt 的极针区域）
+				// 扣除右侧 2.5pt 的极针区域，在电池实际主体矩形内部做到真正的上下左右居中
 				CGRect bBounds = batteryView.bounds;
-				CGFloat labelWidth = bBounds.size.width - 3.0;
-				overlayLabel.frame = CGRectMake(0, 0, labelWidth, bBounds.size.height);
+				CGFloat bodyWidth = bBounds.size.width - 2.5;
+				overlayLabel.frame = CGRectMake(0, 0, bodyWidth, bBounds.size.height);
+				overlayLabel.textAlignment = NSTextAlignmentCenter;
 				
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
