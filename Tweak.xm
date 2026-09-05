@@ -36,10 +36,11 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 @end
 
 // -----------------------------------------------------------------------------
-// 1. 全机型物理等比例 Scale 自适应算法（基于 14 Pro 852pt -> 1.40 黄金基准）
+// 1. 全机型物理等比例 Scale 自适应算法（严谨锁定 14 Pro 852pt -> 1.40 黄金基准）
 // -----------------------------------------------------------------------------
 static CGFloat BMGetAdaptiveScale(void) {
     CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
+    // 严格按 14 Pro (852pt) 的 1.40 黄金比例基准做硬件映射
     CGFloat scale = screenHeight * (1.40 / 852.0);
     
     if (scale < 1.15) scale = 1.15;
@@ -272,7 +273,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	batteryView.frame = CGRectMake(x, y, width, height);
 
-	// 全机型等比例自适应 Scale
+	// 全机型等比例自适应 Scale（基于 14 Pro 1.40 映射）
 	CGFloat scale = BMGetAdaptiveScale();
 	batteryView.transform = CGAffineTransformMakeScale(scale, scale);
 	
@@ -295,7 +296,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 }
 
 // -----------------------------------------------------------------------------
-// 2. 核心样式渲染（精准扣除极柱，锁定电池主体几何绝对居中）
+// 2. 核心样式渲染（完美绝对中点 - 0.5pt 抵消极柱，确保数字水平垂直绝对对称居中）
 // -----------------------------------------------------------------------------
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
@@ -343,19 +344,19 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				CGFloat parentWidth = CGRectGetWidth(batteryView.bounds);
 				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
 				
-				// ✅ 扣除右侧小极柱厚度（电池主体 Body 约占总宽度的 88%）
-				CGFloat bodyWidth = parentWidth * 0.88;
+				// 约束试算字号的可用宽度上限
+				CGFloat maxFitWidth = parentWidth * 0.78;
 				CGFloat maxFontSize = 11.1;
 				
-				// 测量文字真实宽高
-				UIFont *font = BMManagedBatteryViewFontToFitWidth(bodyWidth, maxFontSize, displayText);
+				// 试算最佳矢量字号并测量文字真实尺寸
+				UIFont *font = BMManagedBatteryViewFontToFitWidth(maxFitWidth, maxFontSize, displayText);
 				CGSize textSize = [displayText sizeWithAttributes:@{NSFontAttributeName : font}];
 				CGFloat labelWidth = ceil(textSize.width);
 				CGFloat labelHeight = ceil(textSize.height);
 
-				// ✅ 在真正的电池主体（Body）范围内算绝对几何居中
-				CGFloat centerX = floor((bodyWidth - labelWidth) * 0.5) + 0.5;
-				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
+				// ✅ 居中算法：绝对几何中点向左微调 0.5pt，完美对齐视觉重心
+				CGFloat centerX = floor((parentWidth - labelWidth) * 0.5) - 0.5;
+				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5);
 
 				UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 				BMConfigureOverlayLabel(overlayLabel, textColor);
