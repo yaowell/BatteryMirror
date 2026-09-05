@@ -6,6 +6,8 @@
 #import <objc/runtime.h>
 #import <notify.h>
 
+extern NSString *const kCAFilterDestOut;
+
 static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
 static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
 static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
@@ -126,13 +128,13 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
-// 解决 100% 贴边问题：留出 2.5pt 安全 Padding 进行动态字号缩放
-static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText) {
+// 核心自适应函数：根据传进来的 padding 计算（1~99 传 0.0，100 传专属收紧值）
+static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText, CGFloat padding) {
 	if (targetWidth <= 1.0) {
 		targetWidth = 18.0;
 	}
 
-	CGFloat safeTargetWidth = targetWidth - 2.5;
+	CGFloat safeTargetWidth = targetWidth - padding;
 
 	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
 	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
@@ -211,7 +213,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 绝对几何居中算法：使用 bounds + center 锁定中点，以中心为轴等比放大 1.37 倍
+// 布局逻辑：1.37 倍物理拉伸与双轴精准居中
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -220,16 +222,21 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	CGRect bounds = controller.view.bounds;
 	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
+	
+	CGFloat width = 31.0;
+	CGFloat height = 16.0;
+	
+	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
+	CGFloat y;
 
-	batteryView.transform = CGAffineTransformIdentity;
-	batteryView.bounds = CGRectMake(0, 0, 31.0, 16.0);
+	if (isExpanded) {
+		y = 35.0; 
+	} else {
+		y = floor((CGRectGetHeight(bounds) - height) * 0.5);
+	}
 
-	CGFloat centerX = CGRectGetWidth(bounds) * 0.5;
-	CGFloat centerY = isExpanded ? (35.0 + 8.0) : (CGRectGetHeight(bounds) * 0.5);
-
-	batteryView.center = CGPointMake(centerX, centerY);
+	batteryView.frame = CGRectMake(x, y, width, height);
 	batteryView.transform = CGAffineTransformMakeScale(1.37, 1.37);
-
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -282,7 +289,12 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			label.alpha = 0.0;
 
 			if (displayText.length > 0) {
-				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
+				// 精准控制：只有 100 扣 2.8pt，1~99 传 0.0pt（完全不动它）
+				BOOL isHundred = [displayText isEqualToString:@"100"];
+				CGFloat padding = isHundred ? 2.8 : 0.0;
+
+				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, displayText, padding);
+
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = normalFont;
 				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
