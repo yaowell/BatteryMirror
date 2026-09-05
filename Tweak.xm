@@ -264,6 +264,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	[controller.view bringSubviewToFront:batteryView];
 }
 
+// ✅ 优化极柱过滤：提升阈值至 15.0，防止右侧电池头被切圆角导致拉伸变形
 static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
 	if (!layer) {
 		return NO;
@@ -272,7 +273,7 @@ static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
 	CGRect bounds = layer.bounds;
 	CGFloat width = CGRectGetWidth(bounds);
 	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
+	return width >= 15.0 && width <= 40.0 && height >= 8.0 && height <= 20.0;
 }
 
 static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
@@ -361,7 +362,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = normalFont;
 				
-				// 强制精准物理中线对齐计算
+				// ✅ 物理中线精准垂直对齐计算
 				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
 				CGFloat labelHeight = CGRectGetHeight(containerFrame);
 				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
