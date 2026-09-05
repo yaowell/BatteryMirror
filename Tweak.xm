@@ -264,33 +264,6 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	[controller.view bringSubviewToFront:batteryView];
 }
 
-// ✅ 优化极柱过滤：提升阈值至 15.0，防止右侧电池头被切圆角导致拉伸变形
-static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
-	if (!layer) {
-		return NO;
-	}
-
-	CGRect bounds = layer.bounds;
-	CGFloat width = CGRectGetWidth(bounds);
-	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 15.0 && width <= 40.0 && height >= 8.0 && height <= 20.0;
-}
-
-static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
-	if (!layer) {
-		return;
-	}
-
-	if (BMShouldRoundBatteryLayer(layer)) {
-		layer.cornerRadius = MIN(radius, CGRectGetHeight(layer.bounds) * 0.5);
-		layer.masksToBounds = radius > 0.0;
-	}
-
-	for (CALayer *sublayer in layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, radius);
-	}
-}
-
 static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visible) {
 	if (!batteryView) {
 		return;
@@ -334,10 +307,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if ([batteryView respondsToSelector:@selector(setBoltColor:)]) {
 		[batteryView setBoltColor:fillColor];
 	}
-	
-	for (CALayer *sublayer in batteryView.layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
-	}
 
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
 		if ([subview isKindOfClass:[UILabel class]]) {
@@ -362,7 +331,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = normalFont;
 				
-				// ✅ 物理中线精准垂直对齐计算
 				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
 				CGFloat labelHeight = CGRectGetHeight(containerFrame);
 				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
