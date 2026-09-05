@@ -127,11 +127,8 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
-static CGFloat BMOverlayExtraWidth(void) {
-	return 11.0;
-}
-
-static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor, CGFloat maxFontSize) {
+// 精准配置 1:1 原生状态栏紧凑字体
+static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor, CGFloat fontSize) {
 	overlayLabel.textColor = textColor;
 	overlayLabel.highlightedTextColor = textColor;
 	overlayLabel.tintColor = textColor;
@@ -141,11 +138,9 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor, C
 	overlayLabel.layer.allowsGroupBlending = NO;
 	overlayLabel.layer.compositingFilter = nil;
 
-	// 原生等比收紧核心逻辑：交由 iOS 系统底层管理，无需手动调参
-	overlayLabel.font = [UIFont boldSystemFontOfSize:maxFontSize];
-	overlayLabel.adjustsFontSizeToFitWidth = YES;
-	overlayLabel.minimumScaleFactor = 0.5;
-	overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+	overlayLabel.font = [UIFont boldSystemFontOfSize:fontSize];
+	overlayLabel.adjustsFontSizeToFitWidth = NO;
+	overlayLabel.textAlignment = NSTextAlignmentCenter;
 }
 
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -194,7 +189,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 维持你要求的完整图标大小与二级菜单位置
+// 维持你要求的完整图标大小（31.0x16.0，1.37倍）与二级菜单位置（y=35.0）
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -210,9 +205,8 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	CGFloat y;
 
-	// 保持二级菜单/展开状态的关键坐标
 	if (isExpanded) {
-		y = 35.0; 
+		y = 35.0; // 保留二级菜单展开位置
 	} else {
 		y = floor((CGRectGetHeight(bounds) - height) * 0.5);
 	}
@@ -261,9 +255,14 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
 			}
 
-			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
-			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			CGFloat maxFontSize = label.font.pointSize > 0 ? (label.font.pointSize + 7.0) : 14.0;
+			// 不再人为扩展宽度，严格使用电池框内径，还原原生紧凑边距
+			CGFloat overlayWidth = CGRectGetWidth(containerFrame);
+			CGFloat overlayOriginX = CGRectGetMinX(containerFrame);
+
+			// 匹配原生状态栏字号感
+			CGFloat baseFontSize = label.font.pointSize > 0 ? label.font.pointSize : 11.5;
+			CGFloat targetFontSize = baseFontSize + 1.0;
+
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 
@@ -271,7 +270,12 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			label.alpha = 0.0;
 
 			if (displayText.length > 0) {
-				BMConfigureOverlayLabel(overlayLabel, textColor, maxFontSize);
+				// 当电量为 100 时，精确微调 0.8pt，达到与图二原生状态栏完全一致的贴边满格效果
+				if ([displayText isEqualToString:@"100"]) {
+					targetFontSize -= 0.8;
+				}
+
+				BMConfigureOverlayLabel(overlayLabel, textColor, targetFontSize);
 				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
 				overlayLabel.text = displayText;
 				overlayLabel.hidden = NO;
