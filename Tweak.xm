@@ -128,10 +128,14 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
+// 修复 100 骑框的核心函数：加入了 safeTargetWidth 安全防护
 static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText) {
 	if (targetWidth <= 1.0) {
 		targetWidth = 18.0;
 	}
+
+	// 关键防护：强行给可绘制区间扣除 2.5pt 的安全 Padding，防止 100 溢出踩踏右外框
+	CGFloat safeTargetWidth = targetWidth - 2.5;
 
 	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
 	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
@@ -142,7 +146,7 @@ static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat m
 			attributes:@{ NSFontAttributeName: font }
 			context:nil];
 		bestFont = font;
-		if (ceil(CGRectGetWidth(textRect)) <= targetWidth) {
+		if (ceil(CGRectGetWidth(textRect)) <= safeTargetWidth) {
 			break;
 		}
 	}
@@ -210,7 +214,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 还原作者原版的 1.4 倍缩放，同时处理二级菜单位置
+// 布局逻辑：1.37 倍物理拉伸与双轴精准居中
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -220,7 +224,6 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGRect bounds = controller.view.bounds;
 	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
 	
-	// 作者原版标准原生尺寸
 	CGFloat width = 31.0;
 	CGFloat height = 16.0;
 	
@@ -228,15 +231,12 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat y;
 
 	if (isExpanded) {
-		// 二级菜单：根据你需要的位置放置（如 35.0）
 		y = 35.0; 
 	} else {
-		// 1x1 状态：原作者居中算法
 		y = floor((CGRectGetHeight(bounds) - height) * 0.5);
 	}
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	// 恢复作者要求：1.40 整体等比放大
 	batteryView.transform = CGAffineTransformMakeScale(1.37, 1.37);
 	[controller.view bringSubviewToFront:batteryView];
 }
@@ -271,7 +271,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 
-			// 基于原生基准，精准居中计算
 			CGRect containerFrame = label.frame;
 			if (CGRectGetWidth(containerFrame) <= 1.0 || CGRectGetHeight(containerFrame) <= 1.0) {
 				containerFrame = CGRectMake(2.0, 2.0, 27.0, 12.0);
