@@ -260,7 +260,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	batteryView.transform = CGAffineTransformMakeScale(1.35, 1.35);
+	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
