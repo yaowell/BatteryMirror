@@ -56,7 +56,6 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
 	overlayLabel.backgroundColor = UIColor.clearColor;
 	overlayLabel.textAlignment = NSTextAlignmentCenter;
 	overlayLabel.numberOfLines = 1;
-	overlayLabel.adjustsFontSizeToFitWidth = NO;
 	[batteryView addSubview:overlayLabel];
 	objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 	return overlayLabel;
@@ -128,35 +127,11 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
-// 动态匹配字号：扣除 4.0pt 安全 Padding，专供 100 触发自动收紧
-static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText) {
-	if (targetWidth <= 1.0) {
-		targetWidth = 18.0;
-	}
-
-	CGFloat safeTargetWidth = targetWidth - 4.0;
-
-	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
-	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
-	for (CGFloat fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
-		UIFont *font = [UIFont boldSystemFontOfSize:fontSize];
-		CGRect textRect = [referenceText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 40.0)
-			options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-			attributes:@{ NSFontAttributeName: font }
-			context:nil];
-		bestFont = font;
-		if (ceil(CGRectGetWidth(textRect)) <= safeTargetWidth) {
-			break;
-		}
-	}
-	return bestFont;
-}
-
 static CGFloat BMOverlayExtraWidth(void) {
 	return 11.0;
 }
 
-static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
+static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor, CGFloat maxFontSize) {
 	overlayLabel.textColor = textColor;
 	overlayLabel.highlightedTextColor = textColor;
 	overlayLabel.tintColor = textColor;
@@ -165,6 +140,12 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
 	overlayLabel.layer.allowsGroupOpacity = YES;
 	overlayLabel.layer.allowsGroupBlending = NO;
 	overlayLabel.layer.compositingFilter = nil;
+
+	// 原生等比收紧核心逻辑：交由 iOS 系统底层管理，无需手动调参
+	overlayLabel.font = [UIFont boldSystemFontOfSize:maxFontSize];
+	overlayLabel.adjustsFontSizeToFitWidth = YES;
+	overlayLabel.minimumScaleFactor = 0.5;
+	overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
 }
 
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -213,6 +194,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
+// 维持你要求的完整图标大小与二级菜单位置
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -228,6 +210,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	CGFloat y;
 
+	// 保持二级菜单/展开状态的关键坐标
 	if (isExpanded) {
 		y = 35.0; 
 	} else {
@@ -288,10 +271,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			label.alpha = 0.0;
 
 			if (displayText.length > 0) {
-				// 关键点：传入动态的 displayText，使 1~99% 与 100% 能够区分开来动态计算字号
-				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, displayText);
-				BMConfigureOverlayLabel(overlayLabel, textColor);
-				overlayLabel.font = normalFont;
+				BMConfigureOverlayLabel(overlayLabel, textColor, maxFontSize);
 				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
 				overlayLabel.text = displayText;
 				overlayLabel.hidden = NO;
