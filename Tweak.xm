@@ -36,11 +36,10 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 @end
 
 // -----------------------------------------------------------------------------
-// 1. 全机型物理等比例 Scale 自适应算法（严谨锁定 14 Pro 852pt -> 1.40 黄金基准）
+// 1. 全机型物理等比例 Scale 自适应算法（严格锁定 14 Pro 852pt -> 1.40 黄金基准）
 // -----------------------------------------------------------------------------
 static CGFloat BMGetAdaptiveScale(void) {
     CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
-    // 严格按 14 Pro (852pt) 的 1.40 黄金比例基准做硬件映射
     CGFloat scale = screenHeight * (1.40 / 852.0);
     
     if (scale < 1.15) scale = 1.15;
@@ -255,25 +254,33 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
+// -----------------------------------------------------------------------------
+// 图标在模块中的绝对居中（锁定模块中心点 + 自动自适应 Scale 1.40）
+// -----------------------------------------------------------------------------
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
 		return;
 	}
 
+	// 重置 transform 以便精准计算
+	batteryView.transform = CGAffineTransformIdentity;
+
 	CGRect bounds = controller.view.bounds;
+	CGFloat viewWidth = CGRectGetWidth(bounds);
 	CGFloat viewHeight = CGRectGetHeight(bounds);
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
-	CGFloat height = 16.0;
-	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	
+	CGFloat baseWidth = MIN(viewWidth - 8.0, 31.0);
+	CGFloat baseHeight = 16.0;
+
+	// ✅ 1. 强行把原始图标的 Center 锁定在父视图（模块）的几何绝对正中心
 	BOOL isExpandedMenu = viewHeight > 120.0;
-	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
-	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
+	CGFloat centerYRatio = isExpandedMenu ? 0.25 : 0.50;
+	
+	batteryView.bounds = CGRectMake(0, 0, baseWidth, baseHeight);
+	batteryView.center = CGPointMake(floor(viewWidth * 0.5), floor(viewHeight * centerYRatio));
 
-	batteryView.frame = CGRectMake(x, y, width, height);
-
-	// 全机型等比例自适应 Scale（基于 14 Pro 1.40 映射）
+	// ✅ 2. 围绕中心点应用全机型自适应 1.40 Scale 放缩
 	CGFloat scale = BMGetAdaptiveScale();
 	batteryView.transform = CGAffineTransformMakeScale(scale, scale);
 	
@@ -296,7 +303,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 }
 
 // -----------------------------------------------------------------------------
-// 2. 核心样式渲染（完美绝对中点 - 0.5pt 抵消极柱，确保数字水平垂直绝对对称居中）
+// 2. 数字在图标中的绝对居中（改用 center 锚点绑定，彻底免疫 transform 污染）
 // -----------------------------------------------------------------------------
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
@@ -341,29 +348,27 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 
 			if (displayText.length > 0) {
-				CGFloat parentWidth = CGRectGetWidth(batteryView.bounds);
-				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
+				// ✅ 1. 临时清除 label 的 transform 保证测量纯净
+				overlayLabel.transform = CGAffineTransformIdentity;
+
+				CGFloat parentWidth = batteryView.bounds.size.width;
+				CGFloat parentHeight = batteryView.bounds.size.height;
 				
-				// 约束试算字号的可用宽度上限
-				CGFloat maxFitWidth = parentWidth * 0.78;
-				CGFloat maxFontSize = 11.1;
+				CGFloat maxFitWidth = parentWidth * 0.75;
+				CGFloat maxFontSize = 11.0;
 				
-				// 试算最佳矢量字号并测量文字真实尺寸
 				UIFont *font = BMManagedBatteryViewFontToFitWidth(maxFitWidth, maxFontSize, displayText);
 				CGSize textSize = [displayText sizeWithAttributes:@{NSFontAttributeName : font}];
-				CGFloat labelWidth = ceil(textSize.width);
-				CGFloat labelHeight = ceil(textSize.height);
 
-				// ✅ 居中算法：绝对几何中点向左微调 0.5pt，完美对齐视觉重心
-				CGFloat centerX = floor((parentWidth - labelWidth) * 0.5) - 0.5;
-				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5);
+				// ✅ 2. 锁定 bounds 尺寸
+				overlayLabel.bounds = CGRectMake(0, 0, ceil(textSize.width), ceil(textSize.height));
+
+				// ✅ 3. 核心修正：直接用 center 锁定电池身体中心点（parentWidth * 0.44 完美剔除右侧极柱）
+				overlayLabel.center = CGPointMake(floor(parentWidth * 0.44), floor(parentHeight * 0.5));
 
 				UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = font;
-
-				overlayLabel.transform = CGAffineTransformIdentity;
-				overlayLabel.frame = CGRectMake(centerX, centerY, labelWidth, labelHeight);
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
 					NSFontAttributeName: font
