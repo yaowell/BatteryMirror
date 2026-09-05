@@ -130,10 +130,6 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
-static CGFloat BMOverlayExtraWidth(void) {
-	return 11.0;
-}
-
 static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
 	overlayLabel.textColor = textColor;
 	overlayLabel.highlightedTextColor = textColor;
@@ -239,34 +235,9 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
+	// 使用统一 Scale 整体放大 1.40 倍，确保电池内部所有组件（框、填满区域、极针）等比例缩放
 	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
 	[controller.view bringSubviewToFront:batteryView];
-}
-
-static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
-	if (!layer) {
-		return NO;
-	}
-
-	CGRect bounds = layer.bounds;
-	CGFloat width = CGRectGetWidth(bounds);
-	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
-}
-
-static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
-	if (!layer) {
-		return;
-	}
-
-	if (BMShouldRoundBatteryLayer(layer)) {
-		layer.cornerRadius = MIN(radius, CGRectGetHeight(layer.bounds) * 0.5);
-		layer.masksToBounds = radius > 0.0;
-	}
-
-	for (CALayer *sublayer in layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, radius);
-	}
 }
 
 static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visible) {
@@ -294,9 +265,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
 	UIColor *pinColor = bodyColor;
 
-	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
-		[batteryView setInternalSizeCategory:1];
-	}
 	if ([batteryView respondsToSelector:@selector(setFillColor:)]) {
 		[batteryView setFillColor:fillColor];
 	}
@@ -312,11 +280,8 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if ([batteryView respondsToSelector:@selector(setBoltColor:)]) {
 		[batteryView setBoltColor:fillColor];
 	}
-	
-	for (CALayer *sublayer in batteryView.layer.sublayers) {
-		BMApplyCornerRadiusToLayerTree(sublayer, 4.0);
-	}
 
+	// 隐藏原生的子控件（特别是自带的 label），并精准布局自定义 Label
 	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
 		if ([subview isKindOfClass:[UILabel class]]) {
 			UILabel *label = (UILabel *)subview;
@@ -325,22 +290,23 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 			
-			CGRect containerFrame = label.frame;
-			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
-			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			
-			// 严格锁定字号为 11.1 pt，不受任何计算干预
+			// 隐藏原生文字
+			label.hidden = YES;
+			label.alpha = 0.0;
+
 			UIFont *fixedFont = [UIFont boldSystemFontOfSize:11.1];
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
-			
-			label.hidden = YES;
-			label.alpha = 0.0;
 
 			if (displayText.length > 0) {
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = fixedFont;
-				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
+				
+				// 精准居中挂载在 batteryView 的 bounds 内（除去右侧 3pt 的极针区域）
+				CGRect bBounds = batteryView.bounds;
+				CGFloat labelWidth = bBounds.size.width - 3.0;
+				overlayLabel.frame = CGRectMake(0, 0, labelWidth, bBounds.size.height);
+				
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
 					NSFontAttributeName: fixedFont
@@ -350,11 +316,9 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				overlayLabel.transform = CGAffineTransformIdentity;
 				[batteryView bringSubviewToFront:overlayLabel];
 			} else {
-				overlayLabel.frame = containerFrame;
 				overlayLabel.attributedText = nil;
 				overlayLabel.hidden = YES;
 				overlayLabel.alpha = 0.0;
-				overlayLabel.transform = CGAffineTransformIdentity;
 			}
 		}
 	});
