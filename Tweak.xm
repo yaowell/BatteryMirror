@@ -45,9 +45,12 @@ static void BMSetBatteryViewForController(UIViewController *controller, _UIBatte
 	objc_setAssociatedObject(controller, BMBatteryViewKey, batteryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-// 核心改动 1：文字挂载在 controller.view 上，脱离电池自身不对称坐标系
 static UILabel *BMEnsureOverlayLabel(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
+	if (!batteryView) {
+		return nil;
+	}
+
 	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
 	if (overlayLabel) {
 		return overlayLabel;
@@ -62,7 +65,8 @@ static UILabel *BMEnsureOverlayLabel(UIViewController *controller) {
 	overlayLabel.numberOfLines = 1;
 	overlayLabel.adjustsFontSizeToFitWidth = NO;
 
-	[controller.view addSubview:overlayLabel];
+	// 挂载在 batteryView 内部，使其自动响应电池图标的放缩与动画
+	[batteryView addSubview:overlayLabel];
 	
 	objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 	return overlayLabel;
@@ -245,37 +249,47 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 核心改动 2：统一通过模块中心点 targetCenter 同步定位图标和文字
+// 核心修正 1：完美解决图标在卡片内居中的绝对数学对齐
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
 		return;
 	}
 
-	CGRect bounds = controller.view.bounds;
-	CGFloat viewHeight = CGRectGetHeight(bounds);
-	
-	// 二级菜单与未展开态判定
-	CGFloat headerHeight = (viewHeight > 120.0) ? 70.0 : viewHeight;
+	UIView *targetContainer = controller.view;
+	CGRect targetBounds = targetContainer.bounds;
 
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
-	CGFloat height = 16.0;
+	CGFloat centerX = CGRectGetMidX(targetBounds);
+	CGFloat centerY = CGRectGetMidY(targetBounds);
 
-	// 模块几何中心点
-	CGPoint targetCenter = CGPointMake(CGRectGetWidth(bounds) * 0.5, headerHeight * 0.5);
+	// 如果卡片高度大于宽度的 1.2 倍（例如展开态或长条形态），图标精准锁定在顶部 W x W 正方形区域的中心
+	if (CGRectGetHeight(targetBounds) > CGRectGetWidth(targetBounds) * 1.2) {
+		centerY = CGRectGetWidth(targetBounds) * 0.5;
+	}
 
-	// 1. 设置电池居中并放大 1.40
+	CGPoint absoluteCenter = CGPointMake(centerX, centerY);
+
 	batteryView.transform = CGAffineTransformIdentity;
-	batteryView.bounds = CGRectMake(0, 0, width, height);
-	batteryView.center = targetCenter;
+	batteryView.bounds = CGRectMake(0, 0, 31.0, 16.0);
+	batteryView.center = absoluteCenter;
+	
+	// 保持 1.40 倍放大的几何要求
 	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
-	[controller.view bringSubviewToFront:batteryView];
+	[targetContainer bringSubviewToFront:batteryView];
 
-	// 2. 强制文字中心点与电池中心点重合
+	// 核心修正 2：扣除极针（Pin），把 Label 的几何中心强制打在电池的主体中心 (14.0, 8.0)
 	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
 	if (overlayLabel) {
-		overlayLabel.center = targetCenter;
-		[controller.view bringSubviewToFront:overlayLabel];
+		if (overlayLabel.superview != batteryView) {
+			[overlayLabel removeFromSuperview];
+			[batteryView addSubview:overlayLabel];
+		}
+		
+		overlayLabel.transform = CGAffineTransformIdentity;
+		// 电池总宽 31pt，右侧 Pin 占用 3pt，主体宽 28pt
+		overlayLabel.bounds = CGRectMake(0, 0, 28.0, 16.0);
+		overlayLabel.center = CGPointMake(14.0, 8.0);
+		[batteryView bringSubviewToFront:overlayLabel];
 	}
 }
 
@@ -294,7 +308,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 	}
 }
 
-// 核心改动 3：恢复图标 1.4 / 文字 11.1pt 基准，严格同心绝对居中
+// 核心修正 3：样式渲染与 11.1pt 基准字号对齐
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
 		return;
@@ -327,12 +341,15 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	// 隐藏系统可能自带的 UILabel
 	for (UIView *subview in batteryView.subviews) {
 		if ([subview isKindOfClass:[UILabel class]]) {
-			subview.hidden = YES;
-			subview.alpha = 0.0;
+			UILabel *label = (UILabel *)subview;
+			UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
+			if (label != overlayLabel) {
+				label.hidden = YES;
+				label.alpha = 0.0;
+			}
 		}
 	}
 
-	// 查找当前控件的 Controller
 	UIResponder *responder = batteryView.nextResponder;
 	while (responder && ![responder isKindOfClass:[UIViewController class]]) {
 		responder = responder.nextResponder;
@@ -346,19 +363,16 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView);
 
 	if (displayText.length > 0) {
-		// 恢复原设定的 11.1pt 最大字号
 		CGFloat maxFontSize = 11.1; 
 		UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
-		UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(40.0, maxFontSize, @"100");
+		UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(28.0, maxFontSize, @"100");
 		
 		BMConfigureOverlayLabel(overlayLabel, textColor);
 		overlayLabel.font = normalFont;
 		
 		overlayLabel.transform = CGAffineTransformIdentity;
-		overlayLabel.bounds = CGRectMake(0, 0, 40.0, 20.0);
-		
-		// 与电池图标共享绝对 center
-		overlayLabel.center = batteryView.center;
+		overlayLabel.bounds = CGRectMake(0, 0, 28.0, 16.0);
+		overlayLabel.center = CGPointMake(14.0, 8.0);
 
 		overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 			NSForegroundColorAttributeName: textColor,
@@ -366,7 +380,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		}];
 		overlayLabel.hidden = NO;
 		overlayLabel.alpha = 1.0;
-		[controller.view bringSubviewToFront:overlayLabel];
+		[batteryView bringSubviewToFront:overlayLabel];
 	} else {
 		overlayLabel.bounds = CGRectZero;
 		overlayLabel.attributedText = nil;
