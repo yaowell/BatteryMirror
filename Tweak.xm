@@ -260,8 +260,8 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	// ✅ 已修复：恢复 1.0 原生缩放，防止整个电池块及文字被强制放大 1.3 倍
-	batteryView.transform = CGAffineTransformIdentity;
+	// ✅ 恢复原有的 1.30 倍拉伸，把整体图标恢复到原本的大小
+	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -350,8 +350,8 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			CGRect containerFrame = label.frame;
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			// ✅ 已修复：锁死最大字号为 13.5，彻底斩断由动态字号/缓存引发的递归叠加变大 Bug
-			CGFloat maxFontSize = 13.5;
+			// ✅ 配合 1.30 倍的外框拉伸，锁死内部基础字号为 11.0，放大后正好居中且绝不溢出
+			CGFloat maxFontSize = 11.0;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 			
