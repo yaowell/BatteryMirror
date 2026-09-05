@@ -14,8 +14,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 
 @interface _UIBatteryView : UIView
 @property (nonatomic, assign) double chargePercent;
-@property (nonatomic, assign) BOOL saverModeActive;
-@property (nonatomic, assign) BOOL charging;
 - (instancetype)initWithSizeCategory:(NSInteger)sizeCategory;
 - (void)setChargePercent:(double)percent;
 - (void)setChargingState:(NSInteger)state;
@@ -29,18 +27,11 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setBoltColor:(UIColor *)color;
 @end
 
-// -----------------------------------------------------------------------------
-// 1. 全机型物理等比例 Scale 自适应算法（基于 14 Pro 852pt -> 1.40 黄金基准）
-// -----------------------------------------------------------------------------
-static CGFloat BMGetAdaptiveScale(void) {
-    CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
-    CGFloat scale = screenHeight * (1.40 / 852.0);
-    
-    if (scale < 1.15) scale = 1.15;
-    if (scale > 1.55) scale = 1.55;
-    
-    return scale;
-}
+@interface CALayer (BatteryMirrorPrivate)
+@property (nonatomic, retain) NSString *compositingFilter;
+@property (nonatomic, assign) BOOL allowsGroupOpacity;
+@property (nonatomic, assign) BOOL allowsGroupBlending;
+@end
 
 static _UIBatteryView *BMBatteryViewForController(UIViewController *controller) {
 	return objc_getAssociatedObject(controller, BMBatteryViewKey);
@@ -66,7 +57,6 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
 	overlayLabel.textAlignment = NSTextAlignmentCenter;
 	overlayLabel.numberOfLines = 1;
 	overlayLabel.adjustsFontSizeToFitWidth = NO;
-    overlayLabel.translatesAutoresizingMaskIntoConstraints = YES; // ✅ 关键：彻底禁用系统 Auto Layout 干扰
 	[batteryView addSubview:overlayLabel];
 	objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 	return overlayLabel;
@@ -161,12 +151,19 @@ static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat m
 	return bestFont;
 }
 
+static CGFloat BMOverlayExtraWidth(void) {
+	return 11.0;
+}
+
 static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
 	overlayLabel.textColor = textColor;
 	overlayLabel.highlightedTextColor = textColor;
 	overlayLabel.tintColor = textColor;
 	overlayLabel.shadowColor = UIColor.clearColor;
 	overlayLabel.layer.shadowOpacity = 0.0;
+	overlayLabel.layer.allowsGroupOpacity = YES;
+	overlayLabel.layer.allowsGroupBlending = NO;
+	overlayLabel.layer.compositingFilter = nil;
 }
 
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview)) {
@@ -246,33 +243,24 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// -----------------------------------------------------------------------------
-// 2. 图标在模块中的绝对居中（锁定 center，并在 1.40 Scale 下精准对齐）
-// -----------------------------------------------------------------------------
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
 		return;
 	}
 
-	batteryView.transform = CGAffineTransformIdentity;
-
 	CGRect bounds = controller.view.bounds;
-	CGFloat viewWidth = CGRectGetWidth(bounds);
 	CGFloat viewHeight = CGRectGetHeight(bounds);
+	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
+	CGFloat height = 16.0;
+	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	
-	CGFloat baseWidth = MIN(viewWidth - 8.0, 31.0);
-	CGFloat baseHeight = 16.0;
-
 	BOOL isExpandedMenu = viewHeight > 120.0;
-	CGFloat centerYRatio = isExpandedMenu ? 0.25 : 0.50;
-	
-	batteryView.bounds = CGRectMake(0, 0, baseWidth, baseHeight);
-	batteryView.center = CGPointMake(floor(viewWidth * 0.5), floor(viewHeight * centerYRatio));
+	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
+	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
-	CGFloat scale = BMGetAdaptiveScale();
-	batteryView.transform = CGAffineTransformMakeScale(scale, scale);
-	
+	batteryView.frame = CGRectMake(x, y, width, height);
+	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -291,9 +279,6 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 	}
 }
 
-// -----------------------------------------------------------------------------
-// 3. 数字在图标中的绝对居中（纯 Frame 几何数学计算，硬锁 0.44 主体中心）
-// -----------------------------------------------------------------------------
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
 		return;
@@ -331,44 +316,36 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 			
+			CGRect containerFrame = label.frame;
+			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
+			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
+			CGFloat maxFontSize = 11.1;
+			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
+			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
+			
 			label.hidden = YES;
 			label.alpha = 0.0;
 
-			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
-
 			if (displayText.length > 0) {
-				overlayLabel.transform = CGAffineTransformIdentity;
-				[overlayLabel removeConstraints:overlayLabel.constraints]; // 移除已有约束
-
-				CGFloat parentWidth = batteryView.bounds.size.width;
-				CGFloat parentHeight = batteryView.bounds.size.height;
-				
-				CGFloat maxFitWidth = parentWidth * 0.75;
-				CGFloat maxFontSize = 11.0;
-				
-				UIFont *font = BMManagedBatteryViewFontToFitWidth(maxFitWidth, maxFontSize, displayText);
-				CGSize textSize = [displayText sizeWithAttributes:@{NSFontAttributeName : font}];
-
-				CGFloat labelWidth = ceil(textSize.width);
-				CGFloat labelHeight = ceil(textSize.height);
-
-				// ✅ 纯绝对 Frame 算式：电池身体中心为 0.44 * parentWidth
-				CGFloat originX = floor(parentWidth * 0.44 - labelWidth * 0.5);
-				CGFloat originY = floor((parentHeight - labelHeight) * 0.5);
-
-				overlayLabel.frame = CGRectMake(originX, originY, labelWidth, labelHeight);
-
-				UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
+				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
 				BMConfigureOverlayLabel(overlayLabel, textColor);
-				overlayLabel.font = font;
+				overlayLabel.font = normalFont;
+				
+				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
+				CGFloat labelHeight = CGRectGetHeight(containerFrame);
+				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
+
+				overlayLabel.frame = CGRectMake(overlayOriginX, centerY, overlayWidth, labelHeight);
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
-					NSFontAttributeName: font
+					NSFontAttributeName: normalFont
 				}];
 				overlayLabel.hidden = NO;
 				overlayLabel.alpha = 1.0;
+				overlayLabel.transform = CGAffineTransformIdentity;
 				[batteryView bringSubviewToFront:overlayLabel];
 			} else {
+				overlayLabel.frame = containerFrame;
 				overlayLabel.attributedText = nil;
 				overlayLabel.hidden = YES;
 				overlayLabel.alpha = 0.0;
