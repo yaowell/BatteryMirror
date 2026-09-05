@@ -128,13 +128,14 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, 
 	return [NSString stringWithFormat:@"%ld", (long)percent];
 }
 
-// 核心自适应函数：根据传进来的 padding 计算（1~99 传 0.0，100 传专属收紧值）
-static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText, CGFloat padding) {
+// 修复 100 骑框的核心函数：加入了 safeTargetWidth 安全防护
+static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat maxFontSize, NSString *referenceText) {
 	if (targetWidth <= 1.0) {
 		targetWidth = 18.0;
 	}
 
-	CGFloat safeTargetWidth = targetWidth - padding;
+	// 关键防护：强行给可绘制区间扣除 2.5pt 的安全 Padding，防止 100 溢出踩踏右外框
+	CGFloat safeTargetWidth = targetWidth - 2.5;
 
 	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
 	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
@@ -289,12 +290,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			label.alpha = 0.0;
 
 			if (displayText.length > 0) {
-				// 精准控制：只有 100 扣 2.8pt，1~99 传 0.0pt（完全不动它）
-				BOOL isHundred = [displayText isEqualToString:@"100"];
-				CGFloat padding = isHundred ? 2.8 : 0.0;
-
-				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, displayText, padding);
-
+				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = normalFont;
 				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
