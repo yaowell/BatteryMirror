@@ -261,7 +261,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	batteryView.frame = CGRectMake(x, y, width, height);
 	// ✅ 恢复原有的 1.30 倍拉伸，把整体图标恢复到原本的大小
-	batteryView.transform = CGAffineTransformMakeScale(1.30, 1.30);
+	batteryView.transform = CGAffineTransformMakeScale(1.35, 1.35);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -351,7 +351,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
 			// ✅ 配合 1.30 倍的外框拉伸，锁死内部基础字号为 11.0，放大后正好居中且绝不溢出
-			CGFloat maxFontSize = 11.0;
+			CGFloat maxFontSize = 11.5;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 			
