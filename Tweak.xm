@@ -55,6 +55,7 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView) {
 	overlayLabel.userInteractionEnabled = NO;
 	overlayLabel.backgroundColor = UIColor.clearColor;
 	overlayLabel.textAlignment = NSTextAlignmentCenter;
+	overlayLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters; // 强制文字上下中心对齐
 	overlayLabel.numberOfLines = 1;
 	overlayLabel.adjustsFontSizeToFitWidth = NO;
 	[batteryView addSubview:overlayLabel];
@@ -124,7 +125,7 @@ static UIColor *BMManagedBatteryViewInactiveColor(_UIBatteryView *batteryView) {
 	return [BMManagedBatteryViewBaseColor(batteryView) colorWithAlphaComponent:0.34];
 }
 
-static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, UILabel *label) {
+static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView) {
 	float level = [UIDevice currentDevice].batteryLevel;
 	NSInteger percent = level < 0.0f ? 0 : (NSInteger)lroundf(level * 100.0f);
 	return [NSString stringWithFormat:@"%ld", (long)percent];
@@ -149,10 +150,6 @@ static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat m
 		}
 	}
 	return bestFont;
-}
-
-static CGFloat BMOverlayExtraWidth(void) {
-	return 11.0;
 }
 
 static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor) {
@@ -243,6 +240,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
+// 优化：保证电池图标绝对居中
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -250,14 +248,12 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
-	CGFloat viewHeight = CGRectGetHeight(bounds);
 	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
 	CGFloat height = 16.0;
-	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	
-	BOOL isExpandedMenu = viewHeight > 120.0;
-	CGFloat yRatio = isExpandedMenu ? 0.25 : 0.50;
-	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
+	// 完美几何中心对齐公式 (居中不偏置)
+	CGFloat x = (CGRectGetWidth(bounds) - width) * 0.5;
+	CGFloat y = (CGRectGetHeight(bounds) - height) * 0.5;
 
 	batteryView.frame = CGRectMake(x, y, width, height);
 	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
@@ -279,6 +275,7 @@ static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView, BOOL visi
 	}
 }
 
+// 优化：保证文字在电池内部绝对居中
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	if (!batteryView) {
 		return;
@@ -308,51 +305,54 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 		[batteryView setBoltColor:fillColor];
 	}
 
-	BMEnumerateSubviews(batteryView, ^(UIView *subview) {
+	// 隐藏系统可能自带的百分比 Label，防止重叠
+	for (UIView *subview in batteryView.subviews) {
 		if ([subview isKindOfClass:[UILabel class]]) {
 			UILabel *label = (UILabel *)subview;
-			UILabel *overlayLabel = BMEnsureOverlayLabel(batteryView);
-			if (label == overlayLabel) {
-				return;
-			}
-			
-			CGRect containerFrame = label.frame;
-			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
-			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			CGFloat maxFontSize = 11.1;
-			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
-			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
-			
-			label.hidden = YES;
-			label.alpha = 0.0;
-
-			if (displayText.length > 0) {
-				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
-				BMConfigureOverlayLabel(overlayLabel, textColor);
-				overlayLabel.font = normalFont;
-				
-				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
-				CGFloat labelHeight = CGRectGetHeight(containerFrame);
-				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
-
-				overlayLabel.frame = CGRectMake(overlayOriginX, centerY, overlayWidth, labelHeight);
-				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
-					NSForegroundColorAttributeName: textColor,
-					NSFontAttributeName: normalFont
-				}];
-				overlayLabel.hidden = NO;
-				overlayLabel.alpha = 1.0;
-				overlayLabel.transform = CGAffineTransformIdentity;
-				[batteryView bringSubviewToFront:overlayLabel];
-			} else {
-				overlayLabel.frame = containerFrame;
-				overlayLabel.attributedText = nil;
-				overlayLabel.hidden = YES;
-				overlayLabel.alpha = 0.0;
-				overlayLabel.transform = CGAffineTransformIdentity;
+			UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
+			if (label != overlayLabel) {
+				label.hidden = YES;
+				label.alpha = 0.0;
 			}
 		}
-	});
+	}
+
+	UILabel *overlayLabel = BMEnsureOverlayLabel(batteryView);
+	NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView);
+
+	if (displayText.length > 0) {
+		// 消除电池右侧极针（Pin）的干扰，计算电池主体的有效宽高
+		CGRect batteryBounds = batteryView.bounds;
+		CGFloat bodyWidth = CGRectGetWidth(batteryBounds) * 0.90; 
+		CGFloat bodyHeight = CGRectGetHeight(batteryBounds);
+
+		CGFloat maxFontSize = 11.1;
+		UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
+		UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(bodyWidth, maxFontSize, @"100");
+		
+		BMConfigureOverlayLabel(overlayLabel, textColor);
+		overlayLabel.font = normalFont;
+		
+		// 绝对中心计算：将 Label 的中心对齐至电池主体的物理中心点
+		CGFloat centerX = bodyWidth * 0.5;
+		CGFloat centerY = bodyHeight * 0.5;
+		overlayLabel.frame = CGRectMake(centerX - (bodyWidth * 0.5), centerY - (bodyHeight * 0.5), bodyWidth, bodyHeight);
+		
+		overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
+			NSForegroundColorAttributeName: textColor,
+			NSFontAttributeName: normalFont
+		}];
+		overlayLabel.hidden = NO;
+		overlayLabel.alpha = 1.0;
+		overlayLabel.transform = CGAffineTransformIdentity;
+		[batteryView bringSubviewToFront:overlayLabel];
+	} else {
+		overlayLabel.frame = CGRectZero;
+		overlayLabel.attributedText = nil;
+		overlayLabel.hidden = YES;
+		overlayLabel.alpha = 0.0;
+		overlayLabel.transform = CGAffineTransformIdentity;
+	}
 }
 
 static BOOL BMControllerModuleIsActive(UIViewController *controller) {
