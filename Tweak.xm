@@ -237,7 +237,7 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 
 	batteryView.frame = CGRectMake(x, y, width, height);
 	// 恢复作者要求：1.40 整体等比放大
-	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
+	batteryView.transform = CGAffineTransformMakeScale(1.37, 1.37);
 	[controller.view bringSubviewToFront:batteryView];
 }
 
