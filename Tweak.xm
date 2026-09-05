@@ -278,6 +278,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
+// 布局函数：包含二级菜单（展开状态）与 1x1（收起状态）的位置适配
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -285,12 +286,25 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
-	CGFloat width = MIN(CGRectGetWidth(bounds) - 8.0, 31.0);
-	CGFloat height = 16.0;
+	CGFloat width = 43.0;   // 31.0 * 1.4 物理放大宽度
+	CGFloat height = 22.0;  // 16.0 * 1.4 物理放大高度
+	
+	// 判断是否处于二级菜单（长按展开卡片状态）
+	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
+	
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
-	CGFloat y = floor(CGRectGetHeight(bounds) * 0.50 - height * 0.5);
+	CGFloat y;
+
+	if (isExpanded) {
+		// 二级菜单展开状态：电池图标置顶放置（可根据需要微调 35.0 这个数值）
+		y = 35.0;
+	} else {
+		// 1x1 收起状态：在卡片内部垂直居中
+		y = floor((CGRectGetHeight(bounds) - height) * 0.5);
+	}
+	
 	batteryView.frame = CGRectMake(x, y, width, height);
-	batteryView.transform = CGAffineTransformMakeScale(1.40, 1.40);
+	batteryView.transform = CGAffineTransformIdentity; // 彻底清除形变，保持精准矢量绘制
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -302,7 +316,7 @@ static BOOL BMShouldRoundBatteryLayer(CALayer *layer) {
 	CGRect bounds = layer.bounds;
 	CGFloat width = CGRectGetWidth(bounds);
 	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
+	return width >= 5.0 && width <= 50.0 && height >= 5.0 && height <= 30.0;
 }
 
 static void BMApplyCornerRadiusToLayerTree(CALayer *layer, CGFloat radius) {
@@ -346,7 +360,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *pinColor = BMPrefsShowsNub() ? bodyColor : UIColor.clearColor;
 
 	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
-		[batteryView setInternalSizeCategory:1];
+		[batteryView setInternalSizeCategory:0]; // 保持 0 类精细线宽
 	}
 	if ([batteryView respondsToSelector:@selector(setFillColor:)]) {
 		[batteryView setFillColor:fillColor];
@@ -377,13 +391,20 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			if (label == overlayLabel) {
 				return;
 			}
-			if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
-				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:label.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+			
+			// 物理尺寸放大防护，若原生 Frame 异常时进行居中兜底
+			CGRect containerFrame = label.frame;
+			if (CGRectGetWidth(containerFrame) <= 1.0 || CGRectGetHeight(containerFrame) <= 1.0) {
+				containerFrame = CGRectMake(2.0, 2.0, batteryView.bounds.size.width - 6.0, batteryView.bounds.size.height - 4.0);
+			} else if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
+				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:containerFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+			} else {
+				containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
 			}
-			CGRect containerFrame = [objc_getAssociatedObject(label, BMLabelContainerFrameKey) CGRectValue];
+
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			CGFloat maxFontSize = label.font.pointSize + 7.0;
+			CGFloat maxFontSize = label.font.pointSize > 0 ? (label.font.pointSize + 7.0) : 14.0;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			BOOL useCutoutText = BMManagedBatteryViewUsesCutoutText(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
