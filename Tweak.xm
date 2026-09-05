@@ -349,7 +349,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			CGRect containerFrame = label.frame;
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			CGFloat maxFontSize = label.font.pointSize + 7.0;
+		  CGFloat maxFontSize = 13.5;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 			
