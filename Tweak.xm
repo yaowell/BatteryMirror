@@ -260,7 +260,6 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	CGFloat y = floor(viewHeight * yRatio - height * 0.5);
 
 	batteryView.frame = CGRectMake(x, y, width, height);
-	// ✅ 恢复原有的 1.30 倍拉伸，把整体图标恢复到原本的大小
 	batteryView.transform = CGAffineTransformMakeScale(1.35, 1.35);
 	[controller.view bringSubviewToFront:batteryView];
 }
@@ -350,7 +349,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			CGRect containerFrame = label.frame;
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			// ✅ 配合 1.30 倍的外框拉伸，锁死内部基础字号为 11.0，放大后正好居中且绝不溢出
 			CGFloat maxFontSize = 11.1;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
@@ -362,7 +360,13 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
 				BMConfigureOverlayLabel(overlayLabel, textColor);
 				overlayLabel.font = normalFont;
-				overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame), overlayWidth, CGRectGetHeight(containerFrame));
+				
+				// 强制精准物理中线对齐计算
+				CGFloat parentHeight = CGRectGetHeight(batteryView.bounds);
+				CGFloat labelHeight = CGRectGetHeight(containerFrame);
+				CGFloat centerY = floor((parentHeight - labelHeight) * 0.5) + 0.5;
+
+				overlayLabel.frame = CGRectMake(overlayOriginX, centerY, overlayWidth, labelHeight);
 				overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{
 					NSForegroundColorAttributeName: textColor,
 					NSFontAttributeName: normalFont
