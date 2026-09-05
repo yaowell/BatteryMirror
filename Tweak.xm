@@ -351,7 +351,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
 			// ✅ 配合 1.30 倍的外框拉伸，锁死内部基础字号为 11.0，放大后正好居中且绝不溢出
-			CGFloat maxFontSize = 11.3;
+			CGFloat maxFontSize = 11.2;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
 			
