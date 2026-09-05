@@ -135,7 +135,7 @@ static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth, CGFloat m
 	}
 
 	// 关键防护：强行给可绘制区间扣除 2.5pt 的安全 Padding，防止 100 溢出踩踏右外框
-	CGFloat safeTargetWidth = targetWidth - 4.0;
+	CGFloat safeTargetWidth = targetWidth - 3.0;
 
 	CGFloat minFontSize = MAX(8.0, maxFontSize * 0.6);
 	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
