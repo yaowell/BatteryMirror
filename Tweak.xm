@@ -50,7 +50,6 @@ static BOOL BMBatteryPercentageEnabled(void) {
 	if ([bridgedValue respondsToSelector:@selector(boolValue)]) {
 		return [bridgedValue boolValue];
 	}
-
 	return NO;
 }
 
@@ -63,7 +62,6 @@ static BOOL BMPrefsEnabled(void) {
 	if ([value respondsToSelector:@selector(boolValue)]) {
 		return [value boolValue];
 	}
-
 	return YES;
 }
 
@@ -78,7 +76,6 @@ static BOOL BMPrefsShowsNub(void) {
 	if ([value respondsToSelector:@selector(boolValue)]) {
 		return [value boolValue];
 	}
-
 	return YES;
 }
 
@@ -147,7 +144,6 @@ static UIColor *BMManagedBatteryViewFillColor(_UIBatteryView *batteryView) {
 	if (BMManagedBatteryViewIsLowLevel()) {
 		return [UIColor colorWithRed:0.88 green:0.23 blue:0.19 alpha:1.0];
 	}
-
 	return BMManagedBatteryViewBaseColor(batteryView);
 }
 
@@ -161,7 +157,6 @@ static UIColor *BMManagedBatteryViewTextColor(_UIBatteryView *batteryView) {
 	if (BMManagedBatteryViewIsActive(batteryView)) {
 		return UIColor.whiteColor;
 	}
-
 	return UIColor.blackColor;
 }
 
@@ -180,7 +175,7 @@ static UIColor *BMManagedBatteryViewInactiveColor(_UIBatteryView *batteryView) {
 
 static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView, UILabel *label) {
 	if (!BMBatteryPercentageEnabled()) {
-		return label.text;
+		return label.text ? label.text : @"";
 	}
 
 	float level = [UIDevice currentDevice].batteryLevel;
@@ -278,7 +273,7 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller) {
 	return batteryView;
 }
 
-// 布局函数：包含二级菜单（展开状态）与 1x1（收起状态）的位置适配
+// 安全防护布局：使用 35.0x18.0 安全尺寸与微调，防止 iOS 绘图越界引发 Safe Mode
 static void BMLayoutBatteryView(UIViewController *controller) {
 	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
 	if (!batteryView || !batteryView.superview) {
@@ -286,25 +281,26 @@ static void BMLayoutBatteryView(UIViewController *controller) {
 	}
 
 	CGRect bounds = controller.view.bounds;
-	CGFloat width = 43.0;   // 31.0 * 1.4 物理放大宽度
-	CGFloat height = 22.0;  // 16.0 * 1.4 物理放大高度
+	if (CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) {
+		return;
+	}
+
+	CGFloat width = 35.0;  
+	CGFloat height = 18.0; 
 	
-	// 判断是否处于二级菜单（长按展开卡片状态）
 	BOOL isExpanded = CGRectGetHeight(bounds) > 100.0;
 	
 	CGFloat x = floor((CGRectGetWidth(bounds) - width) * 0.5);
 	CGFloat y;
 
 	if (isExpanded) {
-		// 二级菜单展开状态：电池图标置顶放置（可根据需要微调 35.0 这个数值）
-		y = 35.0;
+		y = 35.0; // 二级菜单展开位置
 	} else {
-		// 1x1 收起状态：在卡片内部垂直居中
-		y = floor((CGRectGetHeight(bounds) - height) * 0.5);
+		y = floor((CGRectGetHeight(bounds) - height) * 0.5); // 1x1 状态垂直居中
 	}
 	
 	batteryView.frame = CGRectMake(x, y, width, height);
-	batteryView.transform = CGAffineTransformIdentity; // 彻底清除形变，保持精准矢量绘制
+	batteryView.transform = CGAffineTransformIdentity; 
 	[controller.view bringSubviewToFront:batteryView];
 }
 
@@ -359,9 +355,6 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
 	UIColor *pinColor = BMPrefsShowsNub() ? bodyColor : UIColor.clearColor;
 
-	if ([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]) {
-		[batteryView setInternalSizeCategory:0]; // 保持 0 类精细线宽
-	}
 	if ([batteryView respondsToSelector:@selector(setFillColor:)]) {
 		[batteryView setFillColor:fillColor];
 	}
@@ -392,10 +385,9 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 				return;
 			}
 			
-			// 物理尺寸放大防护，若原生 Frame 异常时进行居中兜底
 			CGRect containerFrame = label.frame;
 			if (CGRectGetWidth(containerFrame) <= 1.0 || CGRectGetHeight(containerFrame) <= 1.0) {
-				containerFrame = CGRectMake(2.0, 2.0, batteryView.bounds.size.width - 6.0, batteryView.bounds.size.height - 4.0);
+				containerFrame = CGRectMake(2.0, 2.0, MAX(10.0, batteryView.bounds.size.width - 6.0), MAX(10.0, batteryView.bounds.size.height - 4.0));
 			} else if (!objc_getAssociatedObject(label, BMLabelContainerFrameKey)) {
 				objc_setAssociatedObject(label, BMLabelContainerFrameKey, [NSValue valueWithCGRect:containerFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 			} else {
@@ -404,7 +396,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 
 			CGFloat overlayWidth = CGRectGetWidth(containerFrame) + BMOverlayExtraWidth();
 			CGFloat overlayOriginX = CGRectGetMidX(containerFrame) - (overlayWidth * 0.5);
-			CGFloat maxFontSize = label.font.pointSize > 0 ? (label.font.pointSize + 7.0) : 14.0;
+			CGFloat maxFontSize = label.font.pointSize > 0 ? (label.font.pointSize + 5.0) : 13.0;
 			UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
 			BOOL useCutoutText = BMManagedBatteryViewUsesCutoutText(batteryView);
 			NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView, label);
@@ -445,7 +437,7 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 		module = nil;
 	}
 
-	if ([module respondsToSelector:@selector(isSelected)]) {
+	if (module && [module respondsToSelector:@selector(isSelected)]) {
 		BOOL moduleSelected = ((BOOL (*)(id, SEL))objc_msgSend)(module, @selector(isSelected));
 		return moduleSelected || lowPowerModeEnabled;
 	}
@@ -454,6 +446,10 @@ static BOOL BMControllerModuleIsActive(UIViewController *controller) {
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller) {
+	if (!controller || !controller.isViewLoaded) {
+		return;
+	}
+
 	if (!BMPrefsEnabled()) {
 		BMShowStockLowPowerArtwork(controller);
 		BMSetManagedBatteryVisibility(BMBatteryViewForController(controller), NO);
@@ -484,6 +480,7 @@ static void BMRefreshLowPowerLabel(UIViewController *controller) {
 }
 
 static BOOL BMIsLowPowerModuleController(UIViewController *controller) {
+	if (!controller) return NO;
 	NSString *className = NSStringFromClass(controller.class);
 	return [className isEqualToString:@"CCUILowPowerModuleViewController"] ||
 		[className containsString:@"LowPowerModuleViewController"];
@@ -495,7 +492,9 @@ static void BMTrackController(UIViewController *controller) {
 		BMTrackedControllers = [NSHashTable weakObjectsHashTable];
 	});
 
-	[BMTrackedControllers addObject:controller];
+	if (controller) {
+		[BMTrackedControllers addObject:controller];
+	}
 }
 
 static void BMRefreshTrackedControllers(NSString *reason) {
