@@ -1,9 +1,11 @@
-Package: com.yaowell.cowbellxs
-Name: Cowbell XS
-Version: 1.0.0
+Package: com.futur3sn0w.batterymirror
+Icon: https://futur3sn0w.github.io/repo/icons/com.futur3sn0w.batterymirror.png
+SileoDepiction: https://futur3sn0w.github.io/repo/depictions/com.futur3sn0w.batterymirror.json
+Name: BatteryMirror
+Version: 1.0
 Architecture: iphoneos-arm64
-Description: 将控制中心低电量模式图标替换为原生态放大的电池图标（Lightweight & optimized BatteryMirror modification for Control Center. Original work by futur3sn0w.）
-Maintainer: yaowell
-Author: yaowell
+Description: Mirrors the statusbar battery on the Low Power Mode toggle in Control Center.
+Maintainer: futur3sn0w
+Author: futur3sn0w
 Section: Tweaks
-Depends: firmware (>= 15.0)
+Depends: firmware (>= 15.0), mobilesubstrate, preferenceloader
