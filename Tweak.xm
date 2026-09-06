@@ -431,7 +431,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 
 			overlayLabel.frame = CGRectMake(
 				overlayOriginX,
-				CGRectGetMinY(containerFrame),
+				GRectGetMinY(containerFrame)-0.5, 
 				overlayWidth,
 				CGRectGetHeight(containerFrame)
 			);
