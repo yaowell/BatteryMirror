@@ -5,15 +5,15 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
-static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
-static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
-static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
-static void *const BMManagedBatteryViewActiveKey = (void *)&BMManagedBatteryViewActiveKey;
-static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
+static void *const BMBatteryViewKey=(void *)&BMBatteryViewKey;
+static void *const BMOverlayLabelKey=(void *)&BMOverlayLabelKey;
+static void *const BMLabelContainerFrameKey=(void *)&BMLabelContainerFrameKey;
+static void *const BMManagedBatteryViewKey=(void *)&BMManagedBatteryViewKey;
+static void *const BMManagedBatteryViewActiveKey=(void *)&BMManagedBatteryViewActiveKey;
+static NSHashTable<UIViewController *> *BMTrackedControllers=nil;
 
 @interface _UIBatteryView : UIView
-@property (nonatomic, assign) double chargePercent;
+@property(nonatomic,assign)double chargePercent;
 - (instancetype)initWithSizeCategory:(NSInteger)sizeCategory;
 - (void)setChargePercent:(double)percent;
 - (void)setSaverModeActive:(BOOL)active;
@@ -151,7 +151,6 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel,UIColor *textColor){
     overlayLabel.shadowColor=UIColor.clearColor;
     overlayLabel.layer.shadowOpacity=0.0;
     overlayLabel.layer.allowsGroupOpacity=YES;
-    overlayLabel.layer.allowsGroupBlending=NO;
     overlayLabel.layer.compositingFilter=nil;
 }
 
@@ -191,11 +190,11 @@ static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller){
 }
 
 static BOOL BMIsSecondaryMenuController(UIViewController *controller){
-    UIView *view=controller.view;
-    if(!view)return NO;
     NSString *className=NSStringFromClass(controller.class);
-    if([className containsString:@"Detail"]||[className containsString:@"Expanded"]||[className containsString:@"Secondary"])return YES;
-    if(view.bounds.size.height>80.0)return YES;
+    if([className containsString:@"Detail"])return YES;
+    if([className containsString:@"Expanded"])return YES;
+    if([className containsString:@"Secondary"])return YES;
+    if([className containsString:@"ExpandedModule"])return YES;
     return NO;
 }
 
@@ -206,10 +205,9 @@ static void BMLayoutBatteryView(UIViewController *controller){
     CGFloat width=MIN(CGRectGetWidth(bounds)-8.0,31.0);
     CGFloat height=16.0;
     CGFloat x=floor((CGRectGetWidth(bounds)-width)*0.5);
-    BOOL secondary=BMIsSecondaryMenuController(controller);
     CGFloat y;
-    if(secondary){
-        y=floor(CGRectGetHeight(bounds)*0.20-height*0.5);
+    if(BMIsSecondaryMenuController(controller)){
+        y=floor((CGRectGetHeight(bounds)-height)*0.5)-18.0;
     }else{
         y=floor((CGRectGetHeight(bounds)-height)*0.5);
     }
@@ -353,6 +351,7 @@ static void BMHandleControllerEvent(UIViewController *controller,NSString *event
 @end
 
 @implementation BMBatteryMirrorObserver
+
 - (instancetype)init{
     self=[super init];
     if(!self)return nil;
@@ -361,12 +360,15 @@ static void BMHandleControllerEvent(UIViewController *controller,NSString *event
     [center addObserver:self selector:@selector(handleBatteryChange:) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
     return self;
 }
+
 - (void)handlePowerStateChange:(NSNotification *)notification{
     BMRefreshTrackedControllers(notification.name);
 }
+
 - (void)handleBatteryChange:(NSNotification *)notification{
     BMRefreshTrackedControllers(notification.name);
 }
+
 @end
 
 %hook _UIBatteryView
