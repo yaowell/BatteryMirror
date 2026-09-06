@@ -429,8 +429,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 
 			overlayLabel.font = normalFont;
 
-			overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame) - 0.5, overlayWidth, CGRectGetHeight(containerFrame));
-			);
+			overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame) - 1.0, overlayWidth, CGRectGetHeight(containerFrame));
 
 			overlayLabel.attributedText =
 				[[NSAttributedString alloc]
