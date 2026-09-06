@@ -365,15 +365,20 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView)
 
         if (displayText.length > 0) {
             UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
-            normalFont = [normalFont fontWithSize:normalFont.pointSize * 0.92];
+            normalFont = [normalFont fontWithSize:normalFont.pointSize * 0.96];
 
             BMConfigureOverlayLabel(overlayLabel, textColor);
 
             overlayLabel.font = normalFont;
+
+            CGFloat labelHeight = CGRectGetHeight(containerFrame);
+            CGFloat fontHeight = normalFont.lineHeight;
+            CGFloat verticalOffset = (labelHeight - fontHeight) * 0.5;
+
             overlayLabel.frame = CGRectMake(overlayOriginX,
-                                            CGRectGetMinY(containerFrame),
+                                            CGRectGetMinY(containerFrame) + verticalOffset,
                                             overlayWidth,
-                                            CGRectGetHeight(containerFrame));
+                                            fontHeight);
 
             if ([displayText isEqualToString:@"100"]) {
                 overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText
