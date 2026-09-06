@@ -379,11 +379,11 @@ static void BMRefreshLowPowerLabel(UIViewController *controller){
 	if(batteryView){
 		BMSetManagedBatteryVisibility(batteryView,YES);
 		[batteryView setChargePercent:(batteryLevel < 0.0f?0.0:batteryLevel)];
+		@try {
+		    [batteryView setValue:@(YES) forKey:@"showsPercentage"];
+		} @catch(NSException *){}
 		if([batteryView respondsToSelector:@selector(setSaverModeActive:)]){
 			[batteryView setSaverModeActive:active];
-		}
-		if([batteryView respondsToSelector:@selector(setShowsPercentage:)]){
-			[batteryView setShowsPercentage:YES];
 		}
 		BMSetManagedBatteryViewActive(batteryView,active);
 		BMApplyBatteryStyling(batteryView);
