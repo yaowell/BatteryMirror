@@ -273,7 +273,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView){
 
 		if(displayText.length>0){
 			UIFont *normalFont=BMManagedBatteryViewFontToFitWidth(overlayWidth,maxFontSize,@"100");
-			UIFont *displayFont=[UIFont boldSystemFontOfSize:normalFont.pointSize*0.90];
+			UIFont *displayFont=[UIFont boldSystemFontOfSize:normalFont.pointSize*0.80];
 
 			BMConfigureOverlayLabel(overlayLabel,textColor);
 			overlayLabel.font=displayFont;
