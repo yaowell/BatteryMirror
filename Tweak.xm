@@ -1,4 +1,4 @@
-#import <CoreFoundation/CoreFoundation.h>
+CGRectGetMinY(containerFrame) - 1.0#import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -429,7 +429,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView) {
 
 			overlayLabel.font = normalFont;
 
-			overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame) - 1.0, overlayWidth, CGRectGetHeight(containerFrame));
+			overlayLabel.frame = CGRectMake(overlayOriginX, CGRectGetMinY(containerFrame) - 0.5, overlayWidth, CGRectGetHeight(containerFrame));
 
 			overlayLabel.attributedText =
 				[[NSAttributedString alloc]
