@@ -218,6 +218,38 @@ static void BMConfigureOverlayLabel(UILabel *overlayLabel, UIColor *textColor)
     overlayLabel.layer.compositingFilter = nil;
 }
 
+static CGRect BMVisualTextBounds(NSString *text, UIFont *font, CGFloat width)
+{
+    if (text.length == 0 || !font) {
+        return CGRectZero;
+    }
+
+    NSAttributedString *string = [[NSAttributedString alloc] initWithString:text
+                                                                    attributes:@{
+                                                                        NSFontAttributeName : font
+                                                                    }];
+
+    CGRect bounds = [string boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
+                                         options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                         context:nil];
+
+    return bounds;
+}
+
+static CGFloat BMVisualCenterOffsetY(NSString *text, UIFont *font, CGFloat containerHeight, CGFloat width)
+{
+    CGRect visualBounds = BMVisualTextBounds(text, font, width);
+
+    if (CGRectGetHeight(visualBounds) <= 0.0) {
+        return 0.0;
+    }
+
+    CGFloat visualCenter = CGRectGetMidY(visualBounds);
+    CGFloat containerCenter = containerHeight * 0.5;
+
+    return containerCenter - visualCenter;
+}
+
 static void BMEnumerateSubviews(UIView *view, void (^block)(UIView *subview))
 {
     if (!view || !block) {
@@ -368,17 +400,19 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView)
             normalFont = [normalFont fontWithSize:normalFont.pointSize * 0.96];
 
             BMConfigureOverlayLabel(overlayLabel, textColor);
-
             overlayLabel.font = normalFont;
+            overlayLabel.textAlignment = NSTextAlignmentCenter;
+            overlayLabel.numberOfLines = 1;
 
-            CGFloat labelHeight = CGRectGetHeight(containerFrame);
-            CGFloat fontHeight = normalFont.lineHeight;
-            CGFloat verticalOffset = (labelHeight - fontHeight) * 0.5;
+            CGFloat visualOffsetY = BMVisualCenterOffsetY(displayText,
+                                                          normalFont,
+                                                          CGRectGetHeight(containerFrame),
+                                                          overlayWidth);
 
             overlayLabel.frame = CGRectMake(overlayOriginX,
-                                            CGRectGetMinY(containerFrame) + verticalOffset,
+                                            CGRectGetMinY(containerFrame) + visualOffsetY,
                                             overlayWidth,
-                                            fontHeight);
+                                            CGRectGetHeight(containerFrame));
 
             if ([displayText isEqualToString:@"100"]) {
                 overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText
