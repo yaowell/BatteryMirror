@@ -18,7 +18,7 @@ static NSHashTable<UIViewController *> *BMTrackedControllers=nil;
  * 不再读取 _UIBatteryView 内部 UILabel 的 pointSize，
  * 因此 SpringBoard 注销/重启后字号不会发生变化。
  */
-static CGFloat BMFixedDisplayFontSize=10.5;
+static CGFloat BMFixedDisplayFontSize=11.3;
 
 @interface _UIBatteryView:UIView
 @property(nonatomic,assign) double chargePercent;
@@ -310,8 +310,8 @@ static void BMLayoutBatteryView(
 
 	batteryView.transform=
 		CGAffineTransformMakeScale(
-			1.30,
-			1.30
+			1.40,
+			1.40
 		);
 
 	[controller.view bringSubviewToFront:batteryView];
