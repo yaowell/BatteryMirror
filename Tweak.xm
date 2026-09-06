@@ -52,6 +52,7 @@ static void BMSetBatteryViewForController(UIViewController *controller, _UIBatte
 static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView)
 {
     UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
+
     if (overlayLabel) {
         return overlayLabel;
     }
@@ -62,9 +63,13 @@ static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView)
     overlayLabel.textAlignment = NSTextAlignmentCenter;
     overlayLabel.numberOfLines = 1;
     overlayLabel.adjustsFontSizeToFitWidth = NO;
+
     [batteryView addSubview:overlayLabel];
 
-    objc_setAssociatedObject(batteryView, BMOverlayLabelKey, overlayLabel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(batteryView,
+                             BMOverlayLabelKey,
+                             overlayLabel,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     return overlayLabel;
 }
@@ -76,7 +81,10 @@ static BOOL BMIsManagedBatteryView(_UIBatteryView *batteryView)
 
 static void BMSetManagedBatteryView(_UIBatteryView *batteryView, BOOL managed)
 {
-    objc_setAssociatedObject(batteryView, BMManagedBatteryViewKey, @(managed), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(batteryView,
+                             BMManagedBatteryViewKey,
+                             @(managed),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL BMManagedBatteryViewIsActive(_UIBatteryView *batteryView)
@@ -86,7 +94,10 @@ static BOOL BMManagedBatteryViewIsActive(_UIBatteryView *batteryView)
 
 static void BMSetManagedBatteryViewActive(_UIBatteryView *batteryView, BOOL active)
 {
-    objc_setAssociatedObject(batteryView, BMManagedBatteryViewActiveKey, @(active), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(batteryView,
+                             BMManagedBatteryViewActiveKey,
+                             @(active),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL BMManagedBatteryViewIsInLowPowerMode(void)
@@ -97,6 +108,7 @@ static BOOL BMManagedBatteryViewIsInLowPowerMode(void)
 static BOOL BMManagedBatteryViewIsLowLevel(void)
 {
     float level = [UIDevice currentDevice].batteryLevel;
+
     return level >= 0.0f && level <= 0.20f;
 }
 
@@ -353,6 +365,7 @@ static void BMApplyBatteryStyling(_UIBatteryView *batteryView)
 
         if (displayText.length > 0) {
             UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth, maxFontSize, @"100");
+            normalFont = [normalFont fontWithSize:normalFont.pointSize * 0.96];
 
             BMConfigureOverlayLabel(overlayLabel, textColor);
 
