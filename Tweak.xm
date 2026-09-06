@@ -5,8 +5,6 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-extern NSString *const kCAFilterDestOut;
-
 static void *const BMBatteryViewKey = (void *)&BMBatteryViewKey;
 static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
 static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
