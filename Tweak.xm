@@ -308,6 +308,11 @@ static void BMLayoutBatteryView(
 			height
 		);
 
+	/*
+	 * 图标大小独立控制。
+	 * 不再通过修改内部 layer 的 cornerRadius
+	 * 来配合缩放，避免右侧 nub 变形。
+	 */
 	batteryView.transform=
 		CGAffineTransformMakeScale(
 			1.40,
@@ -315,50 +320,6 @@ static void BMLayoutBatteryView(
 		);
 
 	[controller.view bringSubviewToFront:batteryView];
-}
-
-static BOOL BMShouldRoundBatteryLayer(
-	CALayer *layer
-){
-	if(!layer)return NO;
-
-	CGRect bounds=layer.bounds;
-
-	CGFloat width=
-		CGRectGetWidth(bounds);
-
-	CGFloat height=
-		CGRectGetHeight(bounds);
-
-	return width>=5.0&&
-		width<=40.0&&
-		height>=5.0&&
-		height<=20.0;
-}
-
-static void BMApplyCornerRadiusToLayerTree(
-	CALayer *layer,
-	CGFloat radius
-){
-	if(!layer)return;
-
-	if(BMShouldRoundBatteryLayer(layer)){
-		layer.cornerRadius=
-			MIN(
-				radius,
-				CGRectGetHeight(layer.bounds)*0.5
-			);
-
-		layer.masksToBounds=
-			radius>0.0;
-	}
-
-	for(CALayer *sublayer in layer.sublayers){
-		BMApplyCornerRadiusToLayerTree(
-			sublayer,
-			radius
-		);
-	}
 }
 
 static void BMSetManagedBatteryVisibility(
@@ -399,6 +360,10 @@ static void BMApplyBatteryStyling(
 
 	UIColor *pinColor=bodyColor;
 
+	/*
+	 * 保留系统 _UIBatteryView 自己的内部尺寸处理。
+	 * 不再人为修改其 CALayer.cornerRadius。
+	 */
 	if(
 		[batteryView
 			respondsToSelector:
@@ -461,13 +426,6 @@ static void BMApplyBatteryStyling(
 				@selector(setPinColorAlpha:)]
 	){
 		[batteryView setPinColorAlpha:1.0];
-	}
-
-	for(CALayer *sublayer in batteryView.layer.sublayers){
-		BMApplyCornerRadiusToLayerTree(
-			sublayer,
-			4.0
-		);
 	}
 
 	BMEnumerateSubviews(
@@ -537,11 +495,9 @@ static void BMApplyBatteryStyling(
 			if(displayText.length>0){
 
 				/*
-				 * 这里不再读取系统内部 label.font，
-				 * 也不再做动态 maxFontSize 计算。
-				 *
-				 * 最终字号固定为 BMFixedDisplayFontSize，
-				 * 所以注销/重启 SpringBoard 后仍保持一致。
+				 * 固定最终字号。
+				 * 不读取系统内部 label.font，
+				 * 不做动态 maxFontSize 计算。
 				 */
 				UIFont *displayFont=
 					[UIFont
