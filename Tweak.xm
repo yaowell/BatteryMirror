@@ -10,7 +10,6 @@ static void *const BMOverlayLabelKey = (void *)&BMOverlayLabelKey;
 static void *const BMLabelContainerFrameKey = (void *)&BMLabelContainerFrameKey;
 static void *const BMManagedBatteryViewKey = (void *)&BMManagedBatteryViewKey;
 static void *const BMManagedBatteryViewActiveKey = (void *)&BMManagedBatteryViewActiveKey;
-
 static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 
 @interface _UIBatteryView : UIView
@@ -23,7 +22,6 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setBodyColor:(UIColor *)color;
 - (void)setPinColor:(UIColor *)color;
 - (void)setInactiveColor:(UIColor *)color;
-- (void)setBoltColor:(UIColor *)color;
 - (UIColor *)_batteryFillColor;
 - (UIColor *)_batteryUnfilledColor;
 - (UIColor *)_batteryTextColor;
@@ -33,400 +31,322 @@ static NSHashTable<UIViewController *> *BMTrackedControllers = nil;
 - (void)setPinColorAlpha:(double)alpha;
 @end
 
-@interface CALayer (BatteryMirrorPrivate)
-@property (nonatomic, retain) NSString *compositingFilter;
-@property (nonatomic, assign) BOOL allowsGroupOpacity;
-@property (nonatomic, assign) BOOL allowsGroupBlending;
-@end
-
 static _UIBatteryView *BMBatteryViewForController(UIViewController *controller){
-	return objc_getAssociatedObject(controller,BMBatteryViewKey);
+    return objc_getAssociatedObject(controller,BMBatteryViewKey);
 }
 
 static UILabel *BMOverlayLabelForBatteryView(_UIBatteryView *batteryView){
-	return objc_getAssociatedObject(batteryView,BMOverlayLabelKey);
+    return objc_getAssociatedObject(batteryView,BMOverlayLabelKey);
 }
 
 static void BMSetBatteryViewForController(UIViewController *controller,_UIBatteryView *batteryView){
-	objc_setAssociatedObject(controller,BMBatteryViewKey,batteryView,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller,BMBatteryViewKey,batteryView,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static UILabel *BMEnsureOverlayLabel(_UIBatteryView *batteryView){
-	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
-	if(overlayLabel){
-		return overlayLabel;
-	}
-	overlayLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-	overlayLabel.userInteractionEnabled = NO;
-	overlayLabel.backgroundColor = UIColor.clearColor;
-	overlayLabel.textAlignment = NSTextAlignmentCenter;
-	overlayLabel.numberOfLines = 1;
-	overlayLabel.adjustsFontSizeToFitWidth = NO;
-	[batteryView addSubview:overlayLabel];
-	objc_setAssociatedObject(batteryView,BMOverlayLabelKey,overlayLabel,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	return overlayLabel;
+    UILabel *overlayLabel=BMOverlayLabelForBatteryView(batteryView);
+    if(overlayLabel)return overlayLabel;
+    overlayLabel=[[UILabel alloc]initWithFrame:CGRectZero];
+    overlayLabel.userInteractionEnabled=NO;
+    overlayLabel.backgroundColor=UIColor.clearColor;
+    overlayLabel.textAlignment=NSTextAlignmentCenter;
+    overlayLabel.numberOfLines=1;
+    overlayLabel.adjustsFontSizeToFitWidth=NO;
+    [batteryView addSubview:overlayLabel];
+    objc_setAssociatedObject(batteryView,BMOverlayLabelKey,overlayLabel,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return overlayLabel;
 }
 
 static BOOL BMIsManagedBatteryView(_UIBatteryView *batteryView){
-	return [objc_getAssociatedObject(batteryView,BMManagedBatteryViewKey) boolValue];
+    return [objc_getAssociatedObject(batteryView,BMManagedBatteryViewKey) boolValue];
 }
 
 static void BMSetManagedBatteryView(_UIBatteryView *batteryView,BOOL managed){
-	objc_setAssociatedObject(batteryView,BMManagedBatteryViewKey,@(managed),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(batteryView,BMManagedBatteryViewKey,@(managed),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL BMManagedBatteryViewIsActive(_UIBatteryView *batteryView){
-	return [objc_getAssociatedObject(batteryView,BMManagedBatteryViewActiveKey) boolValue];
+    return [objc_getAssociatedObject(batteryView,BMManagedBatteryViewActiveKey) boolValue];
 }
 
 static void BMSetManagedBatteryViewActive(_UIBatteryView *batteryView,BOOL active){
-	objc_setAssociatedObject(batteryView,BMManagedBatteryViewActiveKey,@(active),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(batteryView,BMManagedBatteryViewActiveKey,@(active),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL BMManagedBatteryViewIsInLowPowerMode(void){
-	return [NSProcessInfo processInfo].lowPowerModeEnabled;
+    return [NSProcessInfo processInfo].lowPowerModeEnabled;
 }
 
 static BOOL BMManagedBatteryViewIsLowLevel(void){
-	float level = [UIDevice currentDevice].batteryLevel;
-	return level >= 0.0f && level <= 0.20f;
+    float level=[UIDevice currentDevice].batteryLevel;
+    return level>=0.0f&&level<=0.20f;
 }
 
 static UIColor *BMManagedBatteryViewBaseColor(_UIBatteryView *batteryView){
-	return BMManagedBatteryViewIsActive(batteryView)?[UIColor colorWithWhite:0.05 alpha:1.0]:[UIColor colorWithWhite:0.92 alpha:1.0];
+    return BMManagedBatteryViewIsActive(batteryView)?[UIColor colorWithWhite:0.05 alpha:1.0]:[UIColor colorWithWhite:0.92 alpha:1.0];
 }
 
 static UIColor *BMManagedBatteryViewFillColor(_UIBatteryView *batteryView){
-	if(BMManagedBatteryViewIsInLowPowerMode()){
-		return [UIColor colorWithRed:0.96 green:0.82 blue:0.20 alpha:1.0];
-	}
-	if(BMManagedBatteryViewIsLowLevel()){
-		return [UIColor colorWithRed:0.88 green:0.23 blue:0.19 alpha:1.0];
-	}
-	return BMManagedBatteryViewBaseColor(batteryView);
+    if(BMManagedBatteryViewIsInLowPowerMode()){
+        return [UIColor colorWithRed:0.96 green:0.82 blue:0.20 alpha:1.0];
+    }
+    if(BMManagedBatteryViewIsLowLevel()){
+        return [UIColor colorWithRed:0.88 green:0.23 blue:0.19 alpha:1.0];
+    }
+    return BMManagedBatteryViewBaseColor(batteryView);
 }
 
 static UIColor *BMManagedBatteryViewTextColor(_UIBatteryView *batteryView){
-	if(BMManagedBatteryViewIsInLowPowerMode()){
-		return UIColor.blackColor;
-	}
-	if(BMManagedBatteryViewIsLowLevel()){
-		return UIColor.whiteColor;
-	}
-	if(BMManagedBatteryViewIsActive(batteryView)){
-		return UIColor.whiteColor;
-	}
-	return UIColor.blackColor;
+    if(BMManagedBatteryViewIsInLowPowerMode())return UIColor.blackColor;
+    if(BMManagedBatteryViewIsLowLevel())return UIColor.whiteColor;
+    if(BMManagedBatteryViewIsActive(batteryView))return UIColor.whiteColor;
+    return UIColor.blackColor;
 }
 
 static UIColor *BMManagedBatteryViewBodyColor(_UIBatteryView *batteryView){
-	return BMManagedBatteryViewBaseColor(batteryView);
+    return BMManagedBatteryViewBaseColor(batteryView);
 }
 
 static UIColor *BMManagedBatteryViewInactiveColor(_UIBatteryView *batteryView){
-	return [BMManagedBatteryViewBaseColor(batteryView) colorWithAlphaComponent:0.34];
+    return [BMManagedBatteryViewBaseColor(batteryView) colorWithAlphaComponent:0.34];
 }
 
 static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView){
-	(void)batteryView;
-	UIDevice *device = [UIDevice currentDevice];
-	float level = device.batteryLevel;
-	NSInteger percent = level < 0.0f?0:(NSInteger)lroundf(level * 100.0f);
-	percent = MAX(0,MIN(percent,100));
-	return [NSString stringWithFormat:@"%ld",(long)percent];
+    (void)batteryView;
+    float level=[UIDevice currentDevice].batteryLevel;
+    NSInteger percent=level<0.0f?0:(NSInteger)lroundf(level*100.0f);
+    percent=MAX(0,MIN(percent,100));
+    return [NSString stringWithFormat:@"%ld",(long)percent];
 }
 
 static UIFont *BMManagedBatteryViewFontToFitWidth(CGFloat targetWidth,CGFloat maxFontSize,NSString *referenceText){
-	if(targetWidth <= 1.0){
-		targetWidth = 18.0;
-	}
-	CGFloat minFontSize = MAX(8.0,maxFontSize * 0.6);
-	UIFont *bestFont = [UIFont boldSystemFontOfSize:minFontSize];
-	for(CGFloat fontSize = maxFontSize;fontSize >= minFontSize;fontSize -= 0.5){
-		UIFont *font = [UIFont boldSystemFontOfSize:fontSize];
-		CGRect textRect = [referenceText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX,40.0) options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading attributes:@{NSFontAttributeName:font} context:nil];
-		bestFont = font;
-		if(ceil(CGRectGetWidth(textRect)) <= targetWidth){
-			break;
-		}
-	}
-	return bestFont;
+    if(targetWidth<=1.0)targetWidth=18.0;
+    CGFloat minFontSize=MAX(8.0,maxFontSize*0.6);
+    UIFont *bestFont=[UIFont boldSystemFontOfSize:minFontSize];
+    for(CGFloat fontSize=maxFontSize;fontSize>=minFontSize;fontSize-=0.5){
+        UIFont *font=[UIFont boldSystemFontOfSize:fontSize];
+        CGRect textRect=[referenceText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX,40.0) options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading attributes:@{NSFontAttributeName:font} context:nil];
+        bestFont=font;
+        if(ceil(CGRectGetWidth(textRect))<=targetWidth)break;
+    }
+    return bestFont;
 }
 
 static UIFont *BMManagedBatteryViewVariableWidthFont(UIFont *baseFont,CGFloat fontSize,CGFloat widthTrait){
-	if(!baseFont){
-		baseFont = [UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold];
-	}
-	baseFont = [baseFont fontWithSize:fontSize];
-	NSMutableDictionary *traits = [NSMutableDictionary dictionary];
-	NSDictionary *existingTraits = [baseFont.fontDescriptor objectForKey:UIFontDescriptorTraitsAttribute];
-	if([existingTraits isKindOfClass:[NSDictionary class]]){
-		[traits addEntriesFromDictionary:existingTraits];
-	}
-	traits[UIFontWidthTrait] = @(widthTrait);
-	UIFontDescriptor *descriptor = [baseFont.fontDescriptor fontDescriptorByAddingAttributes:@{UIFontDescriptorTraitsAttribute:traits}];
-	UIFont *font = [UIFont fontWithDescriptor:descriptor size:fontSize];
-	return font?:baseFont;
+    if(!baseFont)baseFont=[UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold];
+    baseFont=[baseFont fontWithSize:fontSize];
+    NSMutableDictionary *traits=[NSMutableDictionary dictionary];
+    NSDictionary *existingTraits=[baseFont.fontDescriptor objectForKey:UIFontDescriptorTraitsAttribute];
+    if([existingTraits isKindOfClass:[NSDictionary class]])[traits addEntriesFromDictionary:existingTraits];
+    traits[UIFontWidthTrait]=@(widthTrait);
+    UIFontDescriptor *descriptor=[baseFont.fontDescriptor fontDescriptorByAddingAttributes:@{UIFontDescriptorTraitsAttribute:traits}];
+    UIFont *font=[UIFont fontWithDescriptor:descriptor size:fontSize];
+    return font?:baseFont;
 }
 
 static void BMConfigureOverlayLabel(UILabel *overlayLabel,UIColor *textColor){
-	overlayLabel.textColor = textColor;
-	overlayLabel.highlightedTextColor = textColor;
-	overlayLabel.tintColor = textColor;
-	overlayLabel.shadowColor = UIColor.clearColor;
-	overlayLabel.layer.shadowOpacity = 0.0;
-	overlayLabel.layer.allowsGroupOpacity = YES;
-	overlayLabel.layer.allowsGroupBlending = NO;
-	overlayLabel.layer.compositingFilter = nil;
+    overlayLabel.textColor=textColor;
+    overlayLabel.highlightedTextColor=textColor;
+    overlayLabel.tintColor=textColor;
+    overlayLabel.shadowColor=UIColor.clearColor;
+    overlayLabel.layer.shadowOpacity=0.0;
+    overlayLabel.layer.allowsGroupOpacity=YES;
+    overlayLabel.layer.allowsGroupBlending=NO;
+    overlayLabel.layer.compositingFilter=nil;
 }
 
 static void BMEnumerateSubviews(UIView *view,void (^block)(UIView *subview)){
-	if(!view || !block){
-		return;
-	}
-	block(view);
-	for(UIView *subview in view.subviews){
-		BMEnumerateSubviews(subview,block);
-	}
+    if(!view||!block)return;
+    block(view);
+    for(UIView *subview in view.subviews)BMEnumerateSubviews(subview,block);
 }
 
 static void BMSetStockLowPowerArtworkHidden(UIViewController *controller,BOOL hidden){
-	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
-	BMEnumerateSubviews(controller.view,^(UIView *subview){
-		if(subview == batteryView || (batteryView && [subview isDescendantOfView:batteryView])){
-			return;
-		}
-		NSString *className = NSStringFromClass(subview.class);
-		if([subview isKindOfClass:[UIImageView class]] || [className containsString:@"CCUICAPackageView"]){
-			subview.hidden = hidden;
-			subview.alpha = hidden?0.0:1.0;
-		}
-	});
+    _UIBatteryView *batteryView=BMBatteryViewForController(controller);
+    BMEnumerateSubviews(controller.view,^(UIView *subview){
+        if(subview==batteryView||(batteryView&&[subview isDescendantOfView:batteryView]))return;
+        NSString *className=NSStringFromClass(subview.class);
+        if([subview isKindOfClass:[UIImageView class]]||[className containsString:@"CCUICAPackageView"]){
+            subview.hidden=hidden;
+            subview.alpha=hidden?0.0:1.0;
+        }
+    });
 }
 
 static void BMHideStockLowPowerArtwork(UIViewController *controller){
-	BMSetStockLowPowerArtworkHidden(controller,YES);
+    BMSetStockLowPowerArtworkHidden(controller,YES);
 }
 
 static _UIBatteryView *BMEnsureBatteryView(UIViewController *controller){
-	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
-	if(batteryView){
-		return batteryView;
-	}
-	Class batteryViewClass = objc_getClass("_UIBatteryView");
-	if(!batteryViewClass || ![batteryViewClass instancesRespondToSelector:@selector(initWithSizeCategory:)]){
-		return nil;
-	}
-	batteryView = [(_UIBatteryView *)[batteryViewClass alloc] initWithSizeCategory:0];
-	batteryView.userInteractionEnabled = NO;
-	[controller.view addSubview:batteryView];
-	BMSetBatteryViewForController(controller,batteryView);
-	BMSetManagedBatteryView(batteryView,YES);
-	return batteryView;
+    _UIBatteryView *batteryView=BMBatteryViewForController(controller);
+    if(batteryView)return batteryView;
+    Class batteryViewClass=objc_getClass("_UIBatteryView");
+    if(!batteryViewClass||![batteryViewClass instancesRespondToSelector:@selector(initWithSizeCategory:)])return nil;
+    batteryView=[(_UIBatteryView *)[batteryViewClass alloc]initWithSizeCategory:0];
+    batteryView.userInteractionEnabled=NO;
+    [controller.view addSubview:batteryView];
+    BMSetBatteryViewForController(controller,batteryView);
+    BMSetManagedBatteryView(batteryView,YES);
+    return batteryView;
+}
+
+static BOOL BMIsSecondaryMenuController(UIViewController *controller){
+    UIView *view=controller.view;
+    if(!view)return NO;
+    NSString *className=NSStringFromClass(controller.class);
+    if([className containsString:@"Detail"]||[className containsString:@"Expanded"]||[className containsString:@"Secondary"])return YES;
+    if(view.bounds.size.height>80.0)return YES;
+    return NO;
 }
 
 static void BMLayoutBatteryView(UIViewController *controller){
-	_UIBatteryView *batteryView = BMBatteryViewForController(controller);
-	if(!batteryView || !batteryView.superview){
-		return;
-	}
-	CGRect bounds = controller.view.bounds;
-	CGFloat width = MIN(CGRectGetWidth(bounds)-8.0,31.0);
-	CGFloat height = 16.0;
-	CGFloat x = floor((CGRectGetWidth(bounds)-width)*0.5);
-	CGFloat y = floor(CGRectGetHeight(bounds)*0.30-height*0.5);
-	batteryView.frame = CGRectMake(x,y,width,height);
-	batteryView.transform = CGAffineTransformMakeScale(1.37,1.37);
-	[controller.view bringSubviewToFront:batteryView];
-}
-
-static BOOL BMShouldRoundBatteryLayer(CALayer *layer){
-	if(!layer){
-		return NO;
-	}
-	CGRect bounds = layer.bounds;
-	CGFloat width = CGRectGetWidth(bounds);
-	CGFloat height = CGRectGetHeight(bounds);
-	return width >= 5.0 && width <= 40.0 && height >= 5.0 && height <= 20.0;
-}
-
-static void BMApplyCornerRadiusToLayerTree(CALayer *layer){
-	if(!layer){
-		return;
-	}
-	if(BMShouldRoundBatteryLayer(layer)){
-		layer.cornerRadius = CGRectGetHeight(layer.bounds)*0.5;
-		layer.masksToBounds = YES;
-	}
-	for(CALayer *sublayer in layer.sublayers){
-		BMApplyCornerRadiusToLayerTree(sublayer);
-	}
+    _UIBatteryView *batteryView=BMBatteryViewForController(controller);
+    if(!batteryView||!batteryView.superview)return;
+    CGRect bounds=controller.view.bounds;
+    CGFloat width=MIN(CGRectGetWidth(bounds)-8.0,31.0);
+    CGFloat height=16.0;
+    CGFloat x=floor((CGRectGetWidth(bounds)-width)*0.5);
+    BOOL secondary=BMIsSecondaryMenuController(controller);
+    CGFloat y;
+    if(secondary){
+        y=floor(CGRectGetHeight(bounds)*0.20-height*0.5);
+    }else{
+        y=floor((CGRectGetHeight(bounds)-height)*0.5);
+    }
+    batteryView.frame=CGRectMake(x,y,width,height);
+    batteryView.transform=CGAffineTransformMakeScale(1.37,1.37);
+    [controller.view bringSubviewToFront:batteryView];
 }
 
 static void BMSetManagedBatteryVisibility(_UIBatteryView *batteryView,BOOL visible){
-	if(!batteryView){
-		return;
-	}
-	batteryView.hidden = !visible;
-	batteryView.alpha = visible?1.0:0.0;
-	UILabel *overlayLabel = BMOverlayLabelForBatteryView(batteryView);
-	if(overlayLabel){
-		overlayLabel.hidden = !visible || overlayLabel.attributedText.length == 0;
-		overlayLabel.alpha = visible?1.0:0.0;
-	}
+    if(!batteryView)return;
+    batteryView.hidden=!visible;
+    batteryView.alpha=visible?1.0:0.0;
+    UILabel *overlayLabel=BMOverlayLabelForBatteryView(batteryView);
+    if(overlayLabel){
+        overlayLabel.hidden=!visible||overlayLabel.attributedText.length==0;
+        overlayLabel.alpha=visible?1.0:0.0;
+    }
 }
 
 static void BMApplyBatteryStyling(_UIBatteryView *batteryView){
-	if(!batteryView){
-		return;
-	}
-	UIColor *fillColor = BMManagedBatteryViewFillColor(batteryView);
-	UIColor *bodyColor = BMManagedBatteryViewBodyColor(batteryView);
-	UIColor *inactiveColor = BMManagedBatteryViewInactiveColor(batteryView);
-	if([batteryView respondsToSelector:@selector(setInternalSizeCategory:)]){
-		[batteryView setInternalSizeCategory:1];
-	}
-	if([batteryView respondsToSelector:@selector(setFillColor:)]){
-		[batteryView setFillColor:fillColor];
-	}
-	if([batteryView respondsToSelector:@selector(setBodyColor:)]){
-		[batteryView setBodyColor:bodyColor];
-	}
-	if([batteryView respondsToSelector:@selector(setPinColor:)]){
-		[batteryView setPinColor:bodyColor];
-	}
-	if([batteryView respondsToSelector:@selector(setInactiveColor:)]){
-		[batteryView setInactiveColor:inactiveColor];
-	}
-	if([batteryView respondsToSelector:@selector(setBoltColor:)]){
-		[batteryView setBoltColor:fillColor];
-	}
-	if([batteryView respondsToSelector:@selector(setBodyColorAlpha:)]){
-		[batteryView setBodyColorAlpha:1.0];
-	}
-	if([batteryView respondsToSelector:@selector(setPinColorAlpha:)]){
-		[batteryView setPinColorAlpha:1.0];
-	}
-	for(CALayer *sublayer in batteryView.layer.sublayers){
-		BMApplyCornerRadiusToLayerTree(sublayer);
-	}
-	BMEnumerateSubviews(batteryView,^(UIView *subview){
-		if(![subview isKindOfClass:[UILabel class]]){
-			return;
-		}
-		UILabel *label = (UILabel *)subview;
-		UILabel *overlayLabel = BMEnsureOverlayLabel(batteryView);
-		if(label == overlayLabel){
-			return;
-		}
-		if(!objc_getAssociatedObject(label,BMLabelContainerFrameKey)){
-			objc_setAssociatedObject(label,BMLabelContainerFrameKey,[NSValue valueWithCGRect:label.frame],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-		}
-		CGRect containerFrame = [objc_getAssociatedObject(label,BMLabelContainerFrameKey) CGRectValue];
-		CGFloat overlayWidth = CGRectGetWidth(containerFrame)+11.0;
-		CGFloat overlayOriginX = CGRectGetMidX(containerFrame)-(overlayWidth*0.5);
-		CGFloat maxFontSize = label.font.pointSize+7.0;
-		UIColor *textColor = BMManagedBatteryViewTextColor(batteryView);
-		NSString *displayText = BMManagedBatteryViewDisplayedText(batteryView);
-		label.hidden = YES;
-		label.alpha = 0.0;
-		if(displayText.length > 0){
-			UIFont *normalFont = BMManagedBatteryViewFontToFitWidth(overlayWidth,maxFontSize,@"100");
-			UIFont *displayFont = normalFont;
-			if([displayText isEqualToString:@"100"]){
-				displayFont = BMManagedBatteryViewVariableWidthFont(normalFont,normalFont.pointSize,-0.10);
-			}
-			BMConfigureOverlayLabel(overlayLabel,textColor);
-			overlayLabel.font = displayFont;
-			overlayLabel.frame = CGRectMake(overlayOriginX,CGRectGetMinY(containerFrame),overlayWidth,CGRectGetHeight(containerFrame));
-			overlayLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText attributes:@{NSForegroundColorAttributeName:textColor,NSFontAttributeName:displayFont}];
-			overlayLabel.hidden = NO;
-			overlayLabel.alpha = 1.0;
-			overlayLabel.transform = CGAffineTransformIdentity;
-			[batteryView bringSubviewToFront:overlayLabel];
-		}else{
-			overlayLabel.frame = containerFrame;
-			overlayLabel.attributedText = nil;
-			overlayLabel.hidden = YES;
-			overlayLabel.alpha = 0.0;
-			overlayLabel.transform = CGAffineTransformIdentity;
-		}
-	});
+    if(!batteryView)return;
+    UIColor *fillColor=BMManagedBatteryViewFillColor(batteryView);
+    UIColor *bodyColor=BMManagedBatteryViewBodyColor(batteryView);
+    UIColor *inactiveColor=BMManagedBatteryViewInactiveColor(batteryView);
+    if([batteryView respondsToSelector:@selector(setInternalSizeCategory:)])[batteryView setInternalSizeCategory:1];
+    if([batteryView respondsToSelector:@selector(setFillColor:)])[batteryView setFillColor:fillColor];
+    if([batteryView respondsToSelector:@selector(setBodyColor:)])[batteryView setBodyColor:bodyColor];
+    if([batteryView respondsToSelector:@selector(setPinColor:)])[batteryView setPinColor:bodyColor];
+    if([batteryView respondsToSelector:@selector(setInactiveColor:)])[batteryView setInactiveColor:inactiveColor];
+    if([batteryView respondsToSelector:@selector(setBodyColorAlpha:)])[batteryView setBodyColorAlpha:1.0];
+    if([batteryView respondsToSelector:@selector(setPinColorAlpha:)])[batteryView setPinColorAlpha:1.0];
+    BMEnumerateSubviews(batteryView,^(UIView *subview){
+        if(![subview isKindOfClass:[UILabel class]])return;
+        UILabel *label=(UILabel *)subview;
+        UILabel *overlayLabel=BMEnsureOverlayLabel(batteryView);
+        if(label==overlayLabel)return;
+        if(!objc_getAssociatedObject(label,BMLabelContainerFrameKey)){
+            objc_setAssociatedObject(label,BMLabelContainerFrameKey,[NSValue valueWithCGRect:label.frame],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        CGRect containerFrame=[objc_getAssociatedObject(label,BMLabelContainerFrameKey) CGRectValue];
+        CGFloat overlayWidth=CGRectGetWidth(containerFrame)+11.0;
+        CGFloat overlayOriginX=CGRectGetMidX(containerFrame)-(overlayWidth*0.5);
+        CGFloat maxFontSize=label.font.pointSize+7.0;
+        UIColor *textColor=BMManagedBatteryViewTextColor(batteryView);
+        NSString *displayText=BMManagedBatteryViewDisplayedText(batteryView);
+        label.hidden=YES;
+        label.alpha=0.0;
+        if(displayText.length>0){
+            UIFont *normalFont=BMManagedBatteryViewFontToFitWidth(overlayWidth,maxFontSize,@"100");
+            UIFont *displayFont=normalFont;
+            if([displayText isEqualToString:@"100"]){
+                displayFont=BMManagedBatteryViewVariableWidthFont(normalFont,normalFont.pointSize,-0.10);
+            }
+            BMConfigureOverlayLabel(overlayLabel,textColor);
+            overlayLabel.font=displayFont;
+            overlayLabel.frame=CGRectMake(overlayOriginX,CGRectGetMinY(containerFrame),overlayWidth,CGRectGetHeight(containerFrame));
+            overlayLabel.attributedText=[[NSAttributedString alloc]initWithString:displayText attributes:@{NSForegroundColorAttributeName:textColor,NSFontAttributeName:displayFont}];
+            overlayLabel.hidden=NO;
+            overlayLabel.alpha=1.0;
+            overlayLabel.transform=CGAffineTransformIdentity;
+            [batteryView bringSubviewToFront:overlayLabel];
+        }else{
+            overlayLabel.frame=containerFrame;
+            overlayLabel.attributedText=nil;
+            overlayLabel.hidden=YES;
+            overlayLabel.alpha=0.0;
+            overlayLabel.transform=CGAffineTransformIdentity;
+        }
+    });
 }
 
 static BOOL BMControllerModuleIsActive(UIViewController *controller){
-	BOOL lowPowerModeEnabled = [NSProcessInfo processInfo].lowPowerModeEnabled;
-	id module = nil;
-	@try{
-		module = [controller valueForKey:@"module"];
-	}
-	@catch (__unused NSException *exception){
-		module = nil;
-	}
-	if([module respondsToSelector:@selector(isSelected)]){
-		BOOL moduleSelected = ((BOOL (*)(id,SEL))objc_msgSend)(module,@selector(isSelected));
-		return moduleSelected || lowPowerModeEnabled;
-	}
-	return lowPowerModeEnabled;
+    BOOL lowPowerModeEnabled=[NSProcessInfo processInfo].lowPowerModeEnabled;
+    id module=nil;
+    @try{
+        module=[controller valueForKey:@"module"];
+    }@catch(__unused NSException *exception){
+        module=nil;
+    }
+    if([module respondsToSelector:@selector(isSelected)]){
+        BOOL moduleSelected=((BOOL(*)(id,SEL))objc_msgSend)(module,@selector(isSelected));
+        return moduleSelected||lowPowerModeEnabled;
+    }
+    return lowPowerModeEnabled;
 }
 
 static void BMRefreshLowPowerLabel(UIViewController *controller){
-	BMHideStockLowPowerArtwork(controller);
-	_UIBatteryView *batteryView = BMEnsureBatteryView(controller);
-	UIDevice *device = [UIDevice currentDevice];
-	float batteryLevel = device.batteryLevel;
-	BOOL active = BMControllerModuleIsActive(controller);
-	if(batteryView){
-		BMSetManagedBatteryVisibility(batteryView,YES);
-		[batteryView setChargePercent:(batteryLevel < 0.0f?0.0:batteryLevel)];
-		@try {
-		    [batteryView setValue:@(YES) forKey:@"showsPercentage"];
-		} @catch(NSException *){}
-		if([batteryView respondsToSelector:@selector(setSaverModeActive:)]){
-			[batteryView setSaverModeActive:active];
-		}
-		BMSetManagedBatteryViewActive(batteryView,active);
-		BMApplyBatteryStyling(batteryView);
-	}
-	BMLayoutBatteryView(controller);
+    BMHideStockLowPowerArtwork(controller);
+    _UIBatteryView *batteryView=BMEnsureBatteryView(controller);
+    UIDevice *device=[UIDevice currentDevice];
+    float batteryLevel=device.batteryLevel;
+    BOOL active=BMControllerModuleIsActive(controller);
+    if(batteryView){
+        BMSetManagedBatteryVisibility(batteryView,YES);
+        [batteryView setChargePercent:(batteryLevel<0.0f?0.0:batteryLevel)];
+        @try{
+            [batteryView setValue:@(YES) forKey:@"showsPercentage"];
+        }@catch(NSException *){}
+        if([batteryView respondsToSelector:@selector(setSaverModeActive:)])[batteryView setSaverModeActive:active];
+        BMSetManagedBatteryViewActive(batteryView,active);
+        BMApplyBatteryStyling(batteryView);
+    }
+    BMLayoutBatteryView(controller);
 }
 
 static BOOL BMIsLowPowerModuleController(UIViewController *controller){
-	NSString *className = NSStringFromClass(controller.class);
-	return [className isEqualToString:@"CCUILowPowerModuleViewController"] || [className containsString:@"LowPowerModuleViewController"];
+    NSString *className=NSStringFromClass(controller.class);
+    return [className isEqualToString:@"CCUILowPowerModuleViewController"]||[className containsString:@"LowPowerModuleViewController"];
 }
 
 static void BMTrackController(UIViewController *controller){
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken,^{
-		BMTrackedControllers = [NSHashTable weakObjectsHashTable];
-	});
-	[BMTrackedControllers addObject:controller];
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken,^{
+        BMTrackedControllers=[NSHashTable weakObjectsHashTable];
+    });
+    [BMTrackedControllers addObject:controller];
 }
 
 static void BMRefreshTrackedControllers(NSString *reason){
-	(void)reason;
-	if(![NSThread isMainThread]){
-		dispatch_async(dispatch_get_main_queue(),^{
-			BMRefreshTrackedControllers(reason);
-		});
-		return;
-	}
-	for(UIViewController *controller in BMTrackedControllers){
-		if(!controller || !controller.isViewLoaded){
-			continue;
-		}
-		BMRefreshLowPowerLabel(controller);
-	}
+    (void)reason;
+    if(![NSThread isMainThread]){
+        dispatch_async(dispatch_get_main_queue(),^{
+            BMRefreshTrackedControllers(reason);
+        });
+        return;
+    }
+    for(UIViewController *controller in BMTrackedControllers){
+        if(!controller||!controller.isViewLoaded)continue;
+        BMRefreshLowPowerLabel(controller);
+    }
 }
 
 static void BMHandleControllerEvent(UIViewController *controller,NSString *eventName){
-	(void)eventName;
-	if(!BMIsLowPowerModuleController(controller) || !controller.isViewLoaded){
-		return;
-	}
-	BMTrackController(controller);
-	BMRefreshLowPowerLabel(controller);
+    (void)eventName;
+    if(!BMIsLowPowerModuleController(controller)||!controller.isViewLoaded)return;
+    BMTrackController(controller);
+    BMRefreshLowPowerLabel(controller);
 }
 
 @interface BMBatteryMirrorObserver : NSObject
@@ -434,81 +354,78 @@ static void BMHandleControllerEvent(UIViewController *controller,NSString *event
 
 @implementation BMBatteryMirrorObserver
 - (instancetype)init{
-	self = [super init];
-	if(!self){
-		return nil;
-	}
-	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-	[center addObserver:self selector:@selector(handlePowerStateChange:) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
-	[center addObserver:self selector:@selector(handleBatteryChange:) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
-	return self;
+    self=[super init];
+    if(!self)return nil;
+    NSNotificationCenter *center=[NSNotificationCenter defaultCenter];
+    [center addObserver:self selector:@selector(handlePowerStateChange:) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
+    [center addObserver:self selector:@selector(handleBatteryChange:) name:UIDeviceBatteryLevelDidChangeNotification object:nil];
+    return self;
 }
 - (void)handlePowerStateChange:(NSNotification *)notification{
-	BMRefreshTrackedControllers(notification.name);
+    BMRefreshTrackedControllers(notification.name);
 }
 - (void)handleBatteryChange:(NSNotification *)notification{
-	BMRefreshTrackedControllers(notification.name);
+    BMRefreshTrackedControllers(notification.name);
 }
 @end
 
 %hook _UIBatteryView
+
 - (void)layoutSubviews{
-	%orig;
-	if(BMIsManagedBatteryView(self)){
-		BMApplyBatteryStyling(self);
-	}
+    %orig;
+    if(BMIsManagedBatteryView(self))BMApplyBatteryStyling(self);
 }
+
 - (UIColor *)_batteryFillColor{
-	if(BMIsManagedBatteryView(self)){
-		return BMManagedBatteryViewFillColor(self);
-	}
-	return %orig;
+    if(BMIsManagedBatteryView(self))return BMManagedBatteryViewFillColor(self);
+    return %orig;
 }
+
 - (UIColor *)_batteryTextColor{
-	if(BMIsManagedBatteryView(self)){
-		return BMManagedBatteryViewTextColor(self);
-	}
-	return %orig;
+    if(BMIsManagedBatteryView(self))return BMManagedBatteryViewTextColor(self);
+    return %orig;
 }
+
 - (UIColor *)_batteryUnfilledColor{
-	if(BMIsManagedBatteryView(self)){
-		return BMManagedBatteryViewInactiveColor(self);
-	}
-	return %orig;
+    if(BMIsManagedBatteryView(self))return BMManagedBatteryViewInactiveColor(self);
+    return %orig;
 }
+
 - (UIColor *)bodyColor{
-	if(BMIsManagedBatteryView(self)){
-		return BMManagedBatteryViewBodyColor(self);
-	}
-	return %orig;
+    if(BMIsManagedBatteryView(self))return BMManagedBatteryViewBodyColor(self);
+    return %orig;
 }
+
 - (UIColor *)pinColor{
-	if(BMIsManagedBatteryView(self)){
-		return BMManagedBatteryViewBodyColor(self);
-	}
-	return %orig;
+    if(BMIsManagedBatteryView(self))return BMManagedBatteryViewBodyColor(self);
+    return %orig;
 }
+
 %end
 
 %hook UIViewController
+
 - (void)viewDidLoad{
-	%orig;
-	BMHandleControllerEvent((UIViewController *)self,@"viewDidLoad");
+    %orig;
+    BMHandleControllerEvent((UIViewController *)self,@"viewDidLoad");
 }
+
 - (void)viewWillAppear:(BOOL)animated{
-	%orig(animated);
-	BMHandleControllerEvent((UIViewController *)self,@"viewWillAppear");
+    %orig(animated);
+    BMHandleControllerEvent((UIViewController *)self,@"viewWillAppear");
 }
+
 - (void)viewDidLayoutSubviews{
-	%orig;
-	BMHandleControllerEvent((UIViewController *)self,@"viewDidLayoutSubviews");
+    %orig;
+    BMHandleControllerEvent((UIViewController *)self,@"viewDidLayoutSubviews");
 }
+
 %end
 
-%ctor {
-	@autoreleasepool {
-		[UIDevice currentDevice].batteryMonitoringEnabled = YES;
-		__unused static BMBatteryMirrorObserver *observer = nil;
-		observer = [[BMBatteryMirrorObserver alloc] init];
-	}
+%ctor{
+    @autoreleasepool{
+        [UIDevice currentDevice].batteryMonitoringEnabled=YES;
+        __unused static BMBatteryMirrorObserver *observer=nil;
+        observer=[[BMBatteryMirrorObserver alloc]init];
+    }
 }
