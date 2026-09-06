@@ -197,15 +197,17 @@ static CGFloat BMOverlayExtraWidth(void){
 	return 11.0;
 }
 
-static CGFloat BMStableMaxFontSize(UILabel *label){
-	NSNumber *cachedValue=
-		objc_getAssociatedObject(
-			label,
-			BMStableMaxFontSizeKey
-		);
+/*
+ * 真正稳定的字号基准。
+ *
+ * 不再把字号绑定到某一个内部 UILabel 对象。
+ * 第一次取得有效基准后，在当前 SpringBoard 生命周期内固定。
+ */
+static CGFloat BMFixedMaxFontSize=0.0;
 
-	if(cachedValue){
-		return cachedValue.doubleValue;
+static CGFloat BMStableMaxFontSize(UILabel *label){
+	if(BMFixedMaxFontSize>0.0){
+		return BMFixedMaxFontSize;
 	}
 
 	CGFloat fontSize=label.font.pointSize;
@@ -215,14 +217,9 @@ static CGFloat BMStableMaxFontSize(UILabel *label){
 		maxFontSize=14.0;
 	}
 
-	objc_setAssociatedObject(
-		label,
-		BMStableMaxFontSizeKey,
-		@(maxFontSize),
-		OBJC_ASSOCIATION_RETAIN_NONATOMIC
-	);
+	BMFixedMaxFontSize=maxFontSize;
 
-	return maxFontSize;
+	return BMFixedMaxFontSize;
 }
 
 static void BMConfigureOverlayLabel(
