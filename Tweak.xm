@@ -9,10 +9,16 @@
 static void *const BMBatteryViewKey=(void *)&BMBatteryViewKey;
 static void *const BMOverlayLabelKey=(void *)&BMOverlayLabelKey;
 static void *const BMLabelContainerFrameKey=(void *)&BMLabelContainerFrameKey;
-static void *const BMStableMaxFontSizeKey=(void *)&BMStableMaxFontSizeKey;
 static void *const BMManagedBatteryViewKey=(void *)&BMManagedBatteryViewKey;
 static void *const BMManagedBatteryViewActiveKey=(void *)&BMManagedBatteryViewActiveKey;
 static NSHashTable<UIViewController *> *BMTrackedControllers=nil;
+
+/*
+ * 固定最终字体大小。
+ * 不再读取 _UIBatteryView 内部 UILabel 的 pointSize，
+ * 因此 SpringBoard 注销/重启后字号不会发生变化。
+ */
+static CGFloat BMFixedDisplayFontSize=12.0;
 
 @interface _UIBatteryView:UIView
 @property(nonatomic,assign) double chargePercent;
@@ -150,76 +156,8 @@ static NSString *BMManagedBatteryViewDisplayedText(_UIBatteryView *batteryView,U
 	return [NSString stringWithFormat:@"%ld",(long)percent];
 }
 
-static UIFont *BMManagedBatteryViewFontToFitWidth(
-	CGFloat targetWidth,
-	CGFloat maxFontSize,
-	NSString *referenceText
-){
-	if(targetWidth<=1.0)targetWidth=18.0;
-
-	CGFloat minFontSize=MAX(8.0,maxFontSize*0.6);
-
-	UIFont *bestFont=
-		[UIFont boldSystemFontOfSize:minFontSize];
-
-	for(
-		CGFloat fontSize=maxFontSize;
-		fontSize>=minFontSize;
-		fontSize-=0.5
-	){
-		UIFont *font=
-			[UIFont boldSystemFontOfSize:fontSize];
-
-		CGRect textRect=
-			[referenceText
-				boundingRectWithSize:
-					CGSizeMake(CGFLOAT_MAX,40.0)
-				options:
-					NSStringDrawingUsesLineFragmentOrigin|
-					NSStringDrawingUsesFontLeading
-				attributes:
-					@{
-						NSFontAttributeName:font
-					}
-				context:nil];
-
-		bestFont=font;
-
-		if(ceil(CGRectGetWidth(textRect))<=targetWidth){
-			break;
-		}
-	}
-
-	return bestFont;
-}
-
 static CGFloat BMOverlayExtraWidth(void){
 	return 11.0;
-}
-
-/*
- * 真正稳定的字号基准。
- *
- * 不再把字号绑定到某一个内部 UILabel 对象。
- * 第一次取得有效基准后，在当前 SpringBoard 生命周期内固定。
- */
-static CGFloat BMFixedMaxFontSize=0.0;
-
-static CGFloat BMStableMaxFontSize(UILabel *label){
-	if(BMFixedMaxFontSize>0.0){
-		return BMFixedMaxFontSize;
-	}
-
-	CGFloat fontSize=label.font.pointSize;
-	CGFloat maxFontSize=fontSize+7.0;
-
-	if(maxFontSize<=0.0){
-		maxFontSize=14.0;
-	}
-
-	BMFixedMaxFontSize=maxFontSize;
-
-	return BMFixedMaxFontSize;
 }
 
 static void BMConfigureOverlayLabel(
@@ -582,9 +520,6 @@ static void BMApplyBatteryStyling(
 				CGRectGetMidX(containerFrame)-
 				(overlayWidth*0.5);
 
-			CGFloat maxFontSize=
-				BMStableMaxFontSize(label);
-
 			UIColor *textColor=
 				BMManagedBatteryViewTextColor(
 					batteryView
@@ -601,17 +536,17 @@ static void BMApplyBatteryStyling(
 
 			if(displayText.length>0){
 
-				UIFont *normalFont=
-					BMManagedBatteryViewFontToFitWidth(
-						overlayWidth,
-						maxFontSize,
-						@"100"
-					);
-
+				/*
+				 * 这里不再读取系统内部 label.font，
+				 * 也不再做动态 maxFontSize 计算。
+				 *
+				 * 最终字号固定为 BMFixedDisplayFontSize，
+				 * 所以注销/重启 SpringBoard 后仍保持一致。
+				 */
 				UIFont *displayFont=
 					[UIFont
 						boldSystemFontOfSize:
-							normalFont.pointSize*0.90];
+							BMFixedDisplayFontSize];
 
 				BMConfigureOverlayLabel(
 					overlayLabel,
