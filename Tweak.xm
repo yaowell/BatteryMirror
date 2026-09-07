@@ -315,8 +315,8 @@ static void BMLayoutBatteryView(
 	 */
 	batteryView.transform=
 		CGAffineTransformMakeScale(
-			1.40,
-			1.40
+			1.37,
+			1.37
 		);
 
 	[controller.view bringSubviewToFront:batteryView];
