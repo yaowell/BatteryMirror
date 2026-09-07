@@ -13,7 +13,7 @@ static void*const BMLabelContainerFrameKey=(void*)&BMLabelContainerFrameKey;
 static void*const BMManagedBatteryViewKey=(void*)&BMManagedBatteryViewKey;
 static void*const BMManagedBatteryViewActiveKey=(void*)&BMManagedBatteryViewActiveKey;
 static NSHashTable<UIViewController*>*BMTrackedControllers=nil;
-static CGFloat BMFixedDisplayFontSize=10.5;
+static CGFloat BMFixedDisplayFontSize=9.5;
 
 @interface _UIBatteryView:UIView
 @property(nonatomic,assign)double chargePercent;
