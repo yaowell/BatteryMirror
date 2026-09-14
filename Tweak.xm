@@ -15,10 +15,15 @@ static NSHashTable<UIViewController *> *BMTrackedControllers=nil;
 
 /*
  * 固定最终字体大小。
- * 不再读取 _UIBatteryView 内部 UILabel 的 pointSize，
- * 因此 SpringBoard 注销/重启后字号不会发生变化。
+ * 1～99% 保持当前稳定字号。
  */
 static CGFloat BMFixedDisplayFontSize=10.5;
+
+/*
+ * 100% 单独字号。
+ * 以后只需要修改这里。
+ */
+static CGFloat BM100DisplayFontSize=9.5;
 
 @interface _UIBatteryView:UIView
 @property(nonatomic,assign) double chargePercent;
@@ -495,14 +500,21 @@ static void BMApplyBatteryStyling(
 			if(displayText.length>0){
 
 				/*
-				 * 固定最终字号。
-				 * 不读取系统内部 label.font，
-				 * 不做动态 maxFontSize 计算。
+				 * 1～99% 使用原来的固定字号。
+				 * 只有 100% 使用单独字号。
 				 */
+				NSInteger displayPercent=
+					[displayText integerValue];
+
+				CGFloat displayFontSize=
+					(displayPercent==100)
+						?BM100DisplayFontSize
+						:BMFixedDisplayFontSize;
+
 				UIFont *displayFont=
 					[UIFont
 						boldSystemFontOfSize:
-							BMFixedDisplayFontSize];
+							displayFontSize];
 
 				BMConfigureOverlayLabel(
 					overlayLabel,
