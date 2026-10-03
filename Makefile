@@ -5,11 +5,11 @@ INSTALL_TARGET_PROCESSES := SpringBoard
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = BatteryMirror
+TWEAK_NAME = BatteryMirrorLite
 
-BatteryMirror_FILES = Tweak.xm
-BatteryMirror_FRAMEWORKS = UIKit Foundation
-BatteryMirror_CFLAGS = -fobjc-arc
+BatteryMirrorLite_FILES = Tweak.xm
+BatteryMirrorLite_FRAMEWORKS = UIKit Foundation
+BatteryMirrorLite_CFLAGS = -fobjc-arc
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
