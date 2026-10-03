@@ -2,8 +2,8 @@ Package: com.yaowell.batterymirrorlite
 Name: BatteryMirror Lite
 Version: 1.0.0
 Architecture: iphoneos-arm64
-Description: 将状态栏电池图标镜像显示在控制中心的低电量模式开关上 / Mirrors the statusbar battery on the Low Power Mode toggle in Control Center.
+Description: 将状态栏电池图标镜像显示在控制中心低电量开关上（基于 futur3sn0w 开源项目，按个人喜好修改了部分效果并去除设置项） Mirrors the statusbar battery on the Low Power Mode toggle in Control Center.
 Maintainer: yaowell
-Author: futur3sn0w, modified by yaowell
+Author: yaowell, futur3sn0w
 Section: Tweaks
 Depends: firmware (>= 15.0), mobilesubstrate
